@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const errorHandler = require('./middlewares/errorHandler');
 const apiLimiter = require('./middlewares/rateLimiter');
 const morgan = require('morgan');
+require('./jobs/reminderJob');
 
 
 // Uygulamayı başlat
@@ -46,6 +47,9 @@ app.use('/api/doctor', doctorRoutes);
 
 const consultantRoutes = require('./routes/consultantRoutes');
 app.use('/api/consultant', consultantRoutes);
+
+const reminderRoutes = require('./routes/reminderRoutes');
+app.use('/api/reminders', reminderRoutes);
 
 // Tüm rotalardan sonra error handler
 app.use(errorHandler);
