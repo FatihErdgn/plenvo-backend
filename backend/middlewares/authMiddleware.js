@@ -1,26 +1,18 @@
-const jwt = require('jsonwebtoken');
+// middlewares/authMiddleware.js
+const jwt = require("jsonwebtoken");
 
-const protect = (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1]; // Bearer token formatında bekliyoruz
+exports.authMiddleware = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1]; // Bearer token
+  if (!token) {
+    return res.status(401).json({ success: false, message: "Token gerekli." });
+  }
 
-    if (!token) {
-        return res.status(401).json({ message: 'Yetkilendirme başarısız.' });
-    }
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; // Token içeriğini request'e ekle
-        next();
-    } catch (error) {
-        res.status(401).json({ message: 'Geçersiz token.' });
-    }
-};
-
-const authorize = (...roles) => (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-        return res.status(403).json({ message: 'Bu işlemi gerçekleştirmek için yetkiniz yok.' });
-    }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // JWT’den gelen user bilgilerini req.user içine koy
     next();
+  } catch (err) {
+    console.error(err);
+    res.status(401).json({ success: false, message: "Geçersiz token." });
+  }
 };
-
-module.exports = { protect, authorize };

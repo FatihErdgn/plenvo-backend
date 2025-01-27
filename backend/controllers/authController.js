@@ -1,32 +1,41 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+// controllers/authController.js
+const User = require("../models/User");
+const jwt = require("jsonwebtoken");
 
-// Kullanıcı giriş işlemi
-const loginUser = async (req, res) => {
+exports.login = async (req, res) => {
+  try {
     const { username, password } = req.body;
 
-    try {
-        const user = await User.findOne({ username });
-
-        if (!user) {
-            return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
-        }
-
-        const isMatch = await user.matchPassword(password);
-
-        if (!isMatch) {
-            return res.status(401).json({ message: 'Şifre hatalı.' });
-        }
-
-        // JWT token oluştur
-        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-            expiresIn: '1h',
-        });
-
-        res.status(200).json({ token, role: user.role });
-    } catch (error) {
-        res.status(500).json({ message: 'Sunucu hatası.', error });
+    // 1) Kullanıcıyı bul
+    const user = await User.findOne({ username, isDeleted: false }).populate("roleId");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Kullanıcı bulunamadı." });
     }
-};
+    console.log(user);
+    // 2) Şifre doğrulama (şemadaki matchPassword metodunu çağırıyoruz)
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: "Şifre hatalı." });
+      
+    }
+    
 
-module.exports = { loginUser };
+    // 3) JWT oluştur
+    const token = jwt.sign(
+      {
+        userId: user._id,
+        role: user.roleId.roleName, // "admin", "manager", "doctor", vs.
+        customerId: user.customerId, // Kullanıcının bağlı olduğu müşteri
+        clinicId: user.clinicId,     // Kullanıcının bağlı olduğu klinik
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "3h" }
+    );
+
+    // 4) Yanıt
+    res.json({ success: true, token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Bir hata oluştu." });
+  }
+};

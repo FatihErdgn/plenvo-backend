@@ -1,28 +1,10 @@
 // middlewares/checkPermission.js
-const Role = require("../models/Role");
-
-const checkPermission = (permission) => {
-  return async (req, res, next) => {
-    try {
-      // req.user.role -> "doctor" veya "admin" vs
-      const roleName = req.user.role; 
-      const roleDoc = await Role.findOne({ name: roleName });
-      if (!roleDoc) {
-        return res.status(403).json({ message: "Rol tanımlı değil" });
-      }
-
-      // Rolün permissions dizisinde aranan permission var mı?
-      if (!roleDoc.permissions.includes(permission)) {
-        return res.status(403).json({ message: "Bu işlem için yetkiniz yok" });
-      }
-
-      // İzin var, devam et
-      next();
-    } catch (err) {
-      console.log(err);
-      res.status(500).json({ message: "Sunucu hatası" });
+exports.checkPermission = (allowedRoles) => {
+  return (req, res, next) => {
+    const userRole = req.user.role; // JWT'den gelen user role
+    if (allowedRoles.includes(userRole)) {
+      return next(); // İzin verilen rollerden biri eşleşiyorsa devam et
     }
+    return res.status(403).json({ success: false, message: "Yetkiniz yok." });
   };
 };
-
-module.exports = checkPermission;

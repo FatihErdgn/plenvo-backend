@@ -18,7 +18,7 @@ const sendReminders = async () => {
     for (const appointment of appointments) {
       const message = `Merhaba ${appointment.patient.name}, yarın saat ${appointment.time} için ${appointment.department} randevunuz bulunmaktadır.`;
       await sendSMS(appointment.patient.phone, message);
-      // const message = `Merhaba Ümit AKPINAR, yarın saat 14:45 için ODYOLOJİ-Fatih ERDOĞAN randevunuz bulunmaktadır.`;
+      // const message = ` `;
       // sendSMS('+905456361780', message)
       // sendSMS('+905417900481', message)
       await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 saniye bekle
