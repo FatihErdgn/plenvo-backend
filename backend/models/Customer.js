@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 
 const customerSchema = new mongoose.Schema({
   customerName: { type: String, required: true },
-  countryId: { type: mongoose.Schema.Types.ObjectId, ref: "Country", required: true },
+  countryId: { type: mongoose.Schema.Types.ObjectId, ref: "Country", required: false },
+  countryName: { type: String, required: false },
   customerDomain: { type: String, required: true },
   appMainColor: { type: String },
   appSecondaryColor: { type: String },

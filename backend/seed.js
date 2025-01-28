@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const Role = require("./models/Role");
+const Customer = require("./models/Customer");
 const User = require("./models/User");
 
 // Asıl seed fonksiyon
@@ -22,6 +23,23 @@ async function seedSuperadmin() {
     console.log("superadmin rolü zaten mevcut.");
   }
 
+  let superAdminCustomer = await Customer.findOne({
+    customerName: "Vic Spera",
+  });
+  if (!superAdminCustomer) {
+    superAdminCustomer = await Customer.create({
+      customerName: "Vic Spera",
+      countryId: null,
+      customerDomain: "localdev",
+      appMainColor: "#000000",
+      appSecondaryColor: "#ffffff",
+      customerType: "individual",
+    });
+    console.log("Superadmin müşterisi oluşturuldu.");
+  } else {
+    console.log("Superadmin müşterisi zaten mevcut.");
+  }
+
   // 3) Kullanıcı var mı?
   const existingUser = await User.findOne({ username: "vic.spera" });
   if (existingUser) {
@@ -29,7 +47,7 @@ async function seedSuperadmin() {
   } else {
     // Şifre
     const password = process.env.SUPER_ADMIN_PASSWORD;
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // const hashedPassword = await bcrypt.hash(password, 10);
 
     // Yeni User
     const superadminUser = new User({

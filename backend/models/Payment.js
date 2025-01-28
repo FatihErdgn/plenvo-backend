@@ -51,6 +51,7 @@ const paymentSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    isDeleted: { type: Boolean, default: false }, // Soft delete alanı
 });
 
 module.exports = mongoose.model("Payment", paymentSchema);

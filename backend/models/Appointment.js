@@ -59,7 +59,8 @@ const appointmentSchema = new mongoose.Schema({
   uniqueCode: { type: String, required: true, unique: true },
 
   // Grup randevuları için katılımcı listesi
-  participants: [participantSchema]
+  participants: [participantSchema],
+  isDeleted: { type: Boolean, default: false }, // Soft delete alanı
 });
 
 appointmentSchema.pre("save", function (next) {

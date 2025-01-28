@@ -42,6 +42,7 @@ const expenseSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+  isDeleted: { type: Boolean, default: false }, // Soft delete alanı
 });
 
 module.exports = mongoose.model("Expense", expenseSchema);

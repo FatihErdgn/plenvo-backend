@@ -40,23 +40,17 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 const authRoutes = require("./routes/authRoutes");
 app.use("/api/auth", authRoutes);
 
+const countryRoutes = require("./routes/countryRoutes");
+app.use("/api/countries", countryRoutes);
+
+const customerRoutes = require("./routes/customerRoutes");
+app.use("/api/customers", customerRoutes);
+
 const userRoutes = require("./routes/userRoutes");
 app.use("/api/users", userRoutes);
 
 const roleRoutes = require("./routes/roleRoutes");
 app.use("/api/roles", roleRoutes);
-
-// const appointmentRoutes = require('./routes/appointmentRoutes');
-// app.use('/api/appointments', appointmentRoutes);
-
-// const adminRoutes = require('./routes/adminRoutes');
-// app.use('/api/admin', adminRoutes);
-
-// const doctorRoutes = require('./routes/doctorRoutes');
-// app.use('/api/doctor', doctorRoutes);
-
-// const consultantRoutes = require('./routes/consultantRoutes');
-// app.use('/api/consultant', consultantRoutes);
 
 const reminderRoutes = require("./routes/reminderRoutes");
 app.use("/api/reminders", reminderRoutes);

@@ -56,6 +56,7 @@ const servicesSchema = new mongoose.Schema({
     default: "active",
   },
   actions: actionsSchema,
+  isDeleted: { type: Boolean, default: false }, // Soft delete alanı
 });
 
 module.exports = mongoose.model("Services", servicesSchema);
