@@ -56,13 +56,34 @@ exports.login = async (req, res) => {
       customerId: isSuperadmin ? null : user.customerId,
     };
 
+    // 4) JWT oluştur
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-      expiresIn: "3h",
+      expiresIn: "3h", // Token 3 saat sonra da geçersiz olacak
     });
 
-    res.json({ success: true, token });
+    // 5) Cookie olarak token'ı set et (session cookie => maxAge yok)
+    res.cookie("token", token, {
+      httpOnly: true,
+      sameSite: "strict",
+      // Eğer tarayıcı kapandığında silinmesini istiyorsan maxAge veya expires koyma.
+      // eğer hem session hem 3h istersen => user 3h open tab => still valid
+    });
+
+    return res.json({ success: true, message: "Login başarılı" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Bir hata oluştu." });
+    return res.status(500).json({ success: false, message: "Bir hata oluştu." });
   }
 };
+
+// controllers/authController.js
+exports.logout = async (req, res) => {
+  try {
+    res.clearCookie("token", { httpOnly: true, secure: process.env.NODE_ENV === "production" });
+    return res.status(200).json({ success: true, message: "Çıkış başarılı." });
+  } catch (error) {
+    console.error("Logout hatası:", error);
+    res.status(500).json({ success: false, message: "Çıkış işlemi başarısız oldu." });
+  }
+};
+

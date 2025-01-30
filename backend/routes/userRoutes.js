@@ -10,6 +10,8 @@ router.post("/", authMiddleware, checkPermission(["admin", "superadmin"]), userC
 router.put("/:id", authMiddleware, checkPermission(["admin", "superadmin"]), userController.updateUser);
 router.delete("/:id", authMiddleware, checkPermission("admin"), userController.deleteUser);
 router.get("/", authMiddleware, checkPermission(["manager", "admin", "superadmin"]), userController.getUsers);
+router.get("/profile", authMiddleware, userController.getProfile);
 router.post("/change-password", authMiddleware, userController.changePassword);
+router.post("/forgot-password", authMiddleware, userController.forgotPassword);
 
 module.exports = router;

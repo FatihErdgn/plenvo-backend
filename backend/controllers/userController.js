@@ -2,6 +2,8 @@ const User = require("../models/User");
 const Role = require("../models/Role");
 const bcrypt = require("bcryptjs");
 const { isValidPassword } = require("../utils/passwordValidation");
+const { generateRandomPassword } = require("../utils/passwordGenerator");
+const sendSMS = require("../utils/smsService");
 
 // Kullanıcı oluşturma
 exports.createUser = async (req, res) => {
@@ -24,8 +26,8 @@ exports.createUser = async (req, res) => {
       hireDate,
       clinicId,
       customerId,
-      password,  // Şifre front-end'den geliyor
-      roleName,   // Front-end'den sadece roleName gelecek (doctor, manager vs.)
+      password, // Şifre front-end'den geliyor
+      roleName, // Front-end'den sadece roleName gelecek (doctor, manager vs.)
     } = req.body;
 
     // Önce roleName'e göre Role dökümanını bulalım
@@ -60,7 +62,7 @@ exports.createUser = async (req, res) => {
       clinicId,
       customerId,
       password,
-      roleId: foundRole._id,  // Sadece roleId saklıyoruz
+      roleId: foundRole._id, // Sadece roleId saklıyoruz
     });
 
     await newUser.save();
@@ -197,6 +199,7 @@ exports.changePassword = async (req, res) => {
 
     // Yeni şifre zorluk kontrolü
     if (!isValidPassword(newPassword)) {
+      console.log(newPassword);
       return res.status(400).json({
         success: false,
         message:
@@ -214,5 +217,90 @@ exports.changePassword = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Şifre değiştirilemedi." });
+  }
+};
+
+// Şifremi Unuttum
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { phoneNumber, userMail } = req.body;
+
+    // En az birinin gönderildiğini kontrol et
+    if (!phoneNumber && !userMail) {
+      return res.status(400).json({
+        success: false,
+        message: "Telefon numarası veya e-posta adresi gereklidir",
+      });
+    }
+
+    // Kullanıcıyı bul (soft delete olmayanlar)
+    const user = await User.findOne({
+      $or: [{ phoneNumber }, { userMail }],
+      isDeleted: false,
+    });
+
+    // Kullanıcıyı bulamasak bile genel mesaj ver (güvenlik için)
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message:
+          "Yeni şifreniz gönderildi.",
+      });
+    }
+
+    // Rastgele şifre oluştur
+    const newPassword = generateRandomPassword();
+
+    // Şifreyi güncelle
+    user.password = newPassword;
+    await user.save(); // pre-save hook ile hash'lenecek
+
+    // SMS gönder (telefon numarası varsa)
+    if (user.phoneNumber) {
+      const messageText = `Yeni şifreniz: ${newPassword}`;
+      await sendSMS([user.phoneNumber], messageText);
+      
+      return res.status(200).json({
+        success: true,
+        message: "Yeni şifreniz SMS ile gönderildi.",
+      });
+    }
+
+    // TODO: E-posta gönderim desteği eklenecek
+    return res.status(400).json({
+      success: false,
+      message: "Şifre sıfırlama için kayıtlı telefon numaranız veya email adresiniz bulunamadı.",
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Şifre sıfırlama işlemi sırasında bir hata oluştu.",
+    });
+  }
+};
+
+exports.getProfile = async (req, res) => {
+  try {
+    // authMiddleware'de "req.user = decoded" demiştik.
+    // orada { userId, role, ... } doldurulur
+    const { userId } = req.user;
+
+    // Veritabanında kullanıcıyı bul
+    // .populate("roleId") => user.roleId nesnesi hakkında tüm dokümanı da getirir.
+    const user = await User.findById(userId).populate("roleId");
+
+    // Kullanıcı yoksa veya soft-deleted ise
+    if (!user || user.isDeleted) {
+      return res.status(404).json({ success: false, message: "Kullanıcı bulunamadı." });
+    }
+
+    // Başarılı => kullanıcıyı dön
+    // (JSON içinde user bilgilerini gönderiyoruz, hassas alanları temizlemek isterseniz seçebilirsiniz)
+    return res.json({ success: true, user });
+  } catch (error) {
+    console.error("Profil getirme hatası:", error);
+    return res.status(500).json({ success: false, message: "Sunucu hatası" });
   }
 };

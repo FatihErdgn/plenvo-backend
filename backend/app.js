@@ -1,8 +1,11 @@
-require("dotenv").config();
+require("dotenv").config({
+  path: `.env.${process.env.NODE_ENV || "development"}`,
+});
 const express = require("express");
 const connectDB = require("./config/database");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser");
 const errorHandler = require("./middlewares/errorHandler");
 const apiLimiter = require("./middlewares/rateLimiter");
 const morgan = require("morgan");
@@ -13,14 +16,43 @@ const seedSuperadmin = require("./seed");
 const app = express();
 
 // MongoDB Bağlantısı
-connectDB();
+connectDB().then(async () => {
+  try {
+    await seedSuperadmin();
+    console.log("Seed işlemi tamam.");
+  } catch (err) {
+    console.error("Seed işlemi sırasında hata:", err);
+  }
+});
 
-seedSuperadmin()
-  .then(() => console.log("Seed işlem tamam."))
-  .catch((err) => console.log("Seed hata:", err));
+const allowedOrigins = [
+  "http://localhost:3000", // Geliştirme ortamı (React frontend)
+  /\.plenvo\.com$/, // *.yourdomain.com şeklindeki tüm subdomainler için izin
+  "https://api.plenvo.com",
+];
 
-// Middleware
-app.use(cors());
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (
+      !origin ||
+      allowedOrigins.some((allowed) =>
+        allowed instanceof RegExp ? allowed.test(origin) : allowed === origin
+      )
+    ) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS Engellendi: ${origin}`);
+      callback(null, false); // JSON hata döndürmek için bu satır daha iyi
+    }
+  },
+  credentials: true, // Cookie paylaşımı için
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+
+app.use(cookieParser());
+
 app.use(bodyParser.json());
 app.use("/api/", apiLimiter);
 
