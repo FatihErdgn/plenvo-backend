@@ -29,8 +29,8 @@ const actionsSchema = new mongoose.Schema(
 const appointmentSchema = new mongoose.Schema({
   // JSON'daki "id" değeri
   customerId: {type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true},
-  countryId: {type: mongoose.Schema.Types.ObjectId, ref: "Country", required: true},
   clinicId: {type: mongoose.Schema.Types.ObjectId, ref: "Clinic", required: true},
+  paymentId: {type: mongoose.Schema.Types.ObjectId, ref: "Payment"},
   // single / group
   type: {
     type: String,
@@ -61,6 +61,8 @@ const appointmentSchema = new mongoose.Schema({
   // Grup randevuları için katılımcı listesi
   participants: [participantSchema],
   isDeleted: { type: Boolean, default: false }, // Soft delete alanı
+  lastEditBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  lastEditDate: { type: Date }
 });
 
 appointmentSchema.pre("save", function (next) {

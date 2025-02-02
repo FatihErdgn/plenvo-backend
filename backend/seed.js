@@ -14,20 +14,26 @@ async function seedSuperadmin() {
   await mongoose.connect(process.env.DB_URI);
   console.log("MongoDB bağlandı.");
 
-  // 2) "superadmin" rolünü bul veya oluştur
-  let superadminRole = await Role.findOne({ roleName: "superadmin" });
-  if (!superadminRole) {
-    superadminRole = await Role.create({ roleName: "superadmin" });
-    console.log("superadmin rolü oluşturuldu.");
+  // 2) Roller var mı kontrol et, eksikleri oluştur
+  const roleNames = ["superadmin", "consultant", "doctor", "manager", "admin"];
+  const existingRoles = await Role.find({ roleName: { $in: roleNames } });
+  const existingRoleNames = existingRoles.map((role) => role.roleName);
+  const rolesToCreate = roleNames.filter(
+    (role) => !existingRoleNames.includes(role)
+  );
+
+  if (rolesToCreate.length > 0) {
+    await Role.insertMany(rolesToCreate.map((roleName) => ({ roleName })));
+    console.log(`${rolesToCreate.length} yeni rol oluşturuldu:`, rolesToCreate);
   } else {
-    console.log("superadmin rolü zaten mevcut.");
+    console.log("Tüm roller zaten mevcut.");
   }
 
   let superAdminCustomer = await Customer.findOne({
     customerName: "Vic Spera",
   });
   if (!superAdminCustomer) {
-    superAdminCustomer = await Customer.create({
+    superAdminCustomer = new Customer({
       customerName: "Vic Spera",
       countryId: null,
       customerDomain: "localdev",
@@ -35,6 +41,7 @@ async function seedSuperadmin() {
       appSecondaryColor: "#ffffff",
       customerType: "individual",
     });
+    await superAdminCustomer.save();
     console.log("Superadmin müşterisi oluşturuldu.");
   } else {
     console.log("Superadmin müşterisi zaten mevcut.");

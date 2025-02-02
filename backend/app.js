@@ -10,6 +10,7 @@ const errorHandler = require("./middlewares/errorHandler");
 const apiLimiter = require("./middlewares/rateLimiter");
 const morgan = require("morgan");
 require("./jobs/reminderJob");
+require("./jobs/updateAppointmentStatus");
 const seedSuperadmin = require("./seed");
 
 // Uygulamayı başlat
