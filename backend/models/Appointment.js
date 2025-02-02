@@ -31,6 +31,7 @@ const appointmentSchema = new mongoose.Schema({
   customerId: {type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true},
   clinicId: {type: mongoose.Schema.Types.ObjectId, ref: "Clinic", required: true},
   paymentId: {type: mongoose.Schema.Types.ObjectId, ref: "Payment"},
+  doctorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   // single / group
   type: {
     type: String,
@@ -54,8 +55,6 @@ const appointmentSchema = new mongoose.Schema({
 
   gender: { type: String },
   age: { type: Number },
-  clinic: { type: String },
-  doctor: { type: String },
   uniqueCode: { type: String, required: true, unique: true },
 
   // Grup randevuları için katılımcı listesi

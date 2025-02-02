@@ -57,6 +57,12 @@ const servicesSchema = new mongoose.Schema({
   },
   actions: actionsSchema,
   isDeleted: { type: Boolean, default: false }, // Soft delete alanı
+  lastEditBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  lastEditDate: { type: Date, required: true },
 });
 
 module.exports = mongoose.model("Services", servicesSchema);

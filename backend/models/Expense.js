@@ -1,12 +1,7 @@
 const mongoose = require("mongoose");
 
 const expenseSchema = new mongoose.Schema({
-  countryId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Country",
-    required: true,
-  },
-  hospitalId: {
+  customerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Customer",
     required: true,
@@ -16,7 +11,7 @@ const expenseSchema = new mongoose.Schema({
     ref: "Clinic",
     required: true,
   },
-  curenncyId: {
+  currencyId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Currency",
     required: true,
@@ -43,6 +38,12 @@ const expenseSchema = new mongoose.Schema({
     required: true,
   },
   isDeleted: { type: Boolean, default: false }, // Soft delete alanı
+  lastEditBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  lastEditDate: { type: Date, required: true },
 });
 
 module.exports = mongoose.model("Expense", expenseSchema);

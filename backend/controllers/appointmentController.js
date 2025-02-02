@@ -1,75 +1,13 @@
 // controllers/appointmentController.js
+
 const Appointment = require("../models/Appointment");
+const User = require("../models/User");
 const generateUniqueAppointmentCode = require("../utils/uniqueAppointmentCode");
 
+// createAppointment: Randevu oluşturma
 exports.createAppointment = async (req, res) => {
-    try {
-      // Front-end'den gelen alanları destructure ediyoruz:
-      const {
-        firstName,
-        lastName,
-        phoneNumber,
-        appointmentDateTime,
-        gender,
-        age,
-        clinic,
-        doctor,
-        type,
-        participants, // Eğer group randevusuyse
-      } = req.body;
-  
-      // Authentication middleware'nin eklediği bilgiler
-      const customerId = req.user.customerId;
-      const clinicId = req.user.clinicId;
-  
-      // Varsayılan actions ve status
-      const defaultActions = {
-        payNow: true,
-        reBook: false,
-        edit: true,
-        view: true,
-      };
-  
-      // Yeni Appointment nesnesi oluşturuyoruz:
-      const newAppointment = new Appointment({
-        customerId,
-        clinicId,
-        type, // "single" veya "group"
-        firstName,
-        lastName,
-        phoneNumber,
-        appointmentDateTime: new Date(appointmentDateTime), // String'den Date'e dönüştürme
-        status: "Açık", // İlk oluşturulma durumu
-        actions: defaultActions,
-        gender,
-        age,
-        clinic,   // Örneğin "Dermatology"
-        doctor,
-        uniqueCode: generateUniqueAppointmentCode(),
-      });
-  
-      // Eğer randevu "group" tipindeyse ve participants gönderildiyse:
-      if (type === "group" && participants) {
-        newAppointment.participants = participants;
-      }
-  
-      await newAppointment.save();
-      return res.status(201).json({ success: true, appointment: newAppointment });
-    } catch (error) {
-      console.error("Appointment oluşturma hatası:", error);
-      return res.status(500).json({ success: false, message: "Randevu oluşturulamadı", error: error.message });
-    }
-  };
-  
-
-// controllers/appointmentController.js
-const Appointment = require("../models/Appointment");
-
-exports.updateAppointment = async (req, res) => {
   try {
-    // URL parametresinden randevu id'si alınıyor
-    const appointmentId = req.params.id;
-    // Front-end'den gelen güncelleme verileri
+    // Frontend'den gelen alanlar
     const {
       firstName,
       lastName,
@@ -77,92 +15,284 @@ exports.updateAppointment = async (req, res) => {
       appointmentDateTime,
       gender,
       age,
-      clinic,
-      doctor,
-      type,
-      participants,
-      status, // Güncellenmek istenen yeni durum (opsiyonel)
+      clinic,   // Bu alan frontend'den gelse de, clinicId token'dan alınacak
+      doctor,   // Doktor adı, örn. "Dr. Anthony Hopkins"
+      type,     // "single" veya "group"
+      participants // (Opsiyonel) grup randevularında
     } = req.body;
-    
-    // Authentication middleware'nin eklediği kullanıcı bilgisi (örneğin req.user)
-    const currentUserId = req.user._id;
 
-    // Silinmemiş (isDeleted: false) ve var olan randevuyu bul
-    const appointment = await Appointment.findOne({ _id: appointmentId, isDeleted: false });
-    if (!appointment) {
-      return res.status(404).json({ success: false, message: "Randevu bulunamadı" });
+    // Gerekli alan kontrolü
+    if (
+      !firstName ||
+      !lastName ||
+      !phoneNumber ||
+      !appointmentDateTime ||
+      !gender ||
+      !age ||
+      !clinic ||
+      !doctor ||
+      !type
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Gerekli tüm alanlar doldurulmalıdır."
+      });
     }
 
-    // Front-end'den gelen alanlarla güncelleme yapıyoruz
-    if (firstName !== undefined) appointment.firstName = firstName;
-    if (lastName !== undefined) appointment.lastName = lastName;
-    if (phoneNumber !== undefined) appointment.phoneNumber = phoneNumber;
-    if (appointmentDateTime !== undefined) {
-      appointment.appointmentDateTime = new Date(appointmentDateTime);
-    }
-    if (gender !== undefined) appointment.gender = gender;
-    if (age !== undefined) appointment.age = age;
-    if (clinic !== undefined) appointment.clinic = clinic;
-    if (doctor !== undefined) appointment.doctor = doctor;
-    if (type !== undefined) appointment.type = type;
-    if (type === "group" && participants !== undefined) {
-      // Eğer randevu tipi group ise, katılımcılar da güncellenir
-      appointment.participants = participants;
+    // Randevu tarihini parse et (örneğin "13-Aug-2023 10:00:00")
+    const apptDate = new Date(appointmentDateTime);
+    if (isNaN(apptDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçersiz randevu tarihi."
+      });
     }
 
-    // Status güncellemesi varsa, status ve actions alanlarını kurala göre ayarlıyoruz.
-    if (status !== undefined) {
-      appointment.status = status;
-      if (status === "İptal Edildi" || status === "Tamamlandı") {
-        appointment.actions = { payNow: false, reBook: true, edit: false, view: true };
-      } else {
-        appointment.actions = { payNow: true, reBook: false, edit: true, view: true };
-      }
+    // Varsayılan actions ve status belirle
+    let actions = {
+      payNow: true,
+      reBook: false,
+      edit: true,
+      view: true
+    };
+    let status = "Açık";
+    // Eğer randevu tarihi geçmişse, status başlangıçta "Ödeme Bekleniyor" olabilir.
+    if (apptDate < new Date()) {
+      status = "Ödeme Bekleniyor";
     }
 
-    // Güncelleyen kullanıcı bilgisi ve güncelleme tarihi
-    appointment.lastEditBy = currentUserId;
-    appointment.lastEditDate = new Date();
+    // Token'dan customerId ve clinicId alınır (authentication middleware req.user'ı doldurmalı)
+    const customerId = req.user.customerId;
+    const clinicId = req.user.clinicId;
 
-    await appointment.save();
+    // paymentId başlangıçta null
+    const paymentId = null;
 
-    return res.status(200).json({ success: true, appointment });
-  } catch (error) {
-    console.error("Randevu güncelleme hatası:", error);
+    // Doktor bilgisi: Frontend'den gelen doktor adını kullanarak User modelinde arama yap
+    let doctorName = doctor;
+    if (doctorName.startsWith("Dr. ")) {
+      doctorName = doctorName.substring(4);
+    }
+    // Doktor adı beklenen format: "FirstName LastName"
+    const nameParts = doctorName.split(" ");
+    if (nameParts.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçersiz doktor adı."
+      });
+    }
+    const doctorFirstName = nameParts[0];
+    const doctorLastName = nameParts.slice(1).join(" ");
+    const doctorUser = await User.findOne({
+      firstName: doctorFirstName,
+      lastName: doctorLastName
+    });
+    if (!doctorUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Belirtilen doktor bulunamadı."
+      });
+    }
+    const doctorId = doctorUser._id;
+
+    // uniqueCode üretimi
+    const uniqueCode = generateUniqueAppointmentCode();
+
+    // Yeni Appointment belgesini oluştur
+    const newAppointment = new Appointment({
+      customerId,
+      clinicId,
+      paymentId,
+      doctorId,
+      type,
+      firstName,
+      lastName,
+      phoneNumber,
+      appointmentDateTime: apptDate,
+      status,
+      actions,
+      gender,
+      age,
+      uniqueCode,
+      // Eğer grup randevusuysa, varsa katılımcıları ekle
+      participants: type === "group" && participants ? participants : []
+    });
+
+    const savedAppointment = await newAppointment.save();
+    return res.status(201).json({
+      success: true,
+      appointment: savedAppointment
+    });
+  } catch (err) {
+    console.error("Create Appointment Error:", err);
     return res.status(500).json({
       success: false,
-      message: "Randevu güncellenemedi",
-      error: error.message,
+      message: "Randevu oluşturulurken bir hata oluştu."
     });
   }
 };
-// controllers/appointmentController.js
-exports.deleteAppointment = async (req, res) => {
-    try {
-      const appointmentId = req.params.id;
-      const currentUserId = req.user._id;
-  
-      // Silinmemiş randevuyu buluyoruz
-      const appointment = await Appointment.findOne({ _id: appointmentId, isDeleted: false });
-      if (!appointment) {
-        return res.status(404).json({ success: false, message: "Randevu bulunamadı" });
+
+// getAppointments: Sayfalama ve sıralı randevu listesi getirme
+exports.getAppointments = async (req, res) => {
+  try {
+    // Query parametreleri (sayfa ve limit)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Sadece ilgili müşteriye ait randevuları getir (token'dan customerId)
+    const customerId = req.user.customerId;
+    // Filtre: soft delete aktif değil
+    const query = { customerId, isDeleted: false };
+
+    // Toplam belge sayısı (sayfalama için)
+    const total = await Appointment.countDocuments(query);
+
+    const appointments = await Appointment.find(query)
+      .sort({ appointmentDateTime: -1 }) // en güncelden en eskiye
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      appointments,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
+  } catch (err) {
+    console.error("Get Appointments Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Randevular alınırken bir hata oluştu."
+    });
+  }
+};
+
+/**
+ * Randevu Güncelleme (Edit)
+ * Frontend'den gelen güncellenmiş alanlarla randevuyu düzenler.
+ * - Güncellenen alanlar: firstName, lastName, phoneNumber, appointmentDateTime, gender, age, clinic, doctor, type, participants, status vb.
+ * - Eğer status "İptal Edildi" veya "Tamamlandı" ise actions güncellenir.
+ * - Güncellemede, lastEditBy ve lastEditDate token'dan gelen kullanıcıyla ayarlanır.
+ */
+exports.updateAppointment = async (req, res) => {
+  try {
+    const appointmentId = req.params.id;
+    const updateData = req.body;
+
+    // Zorunlu alanlarda validasyon yapabilirsiniz
+    if (updateData.appointmentDateTime) {
+      const newDate = new Date(updateData.appointmentDateTime);
+      if (isNaN(newDate.getTime())) {
+        return res.status(400).json({ success: false, message: "Geçersiz tarih formatı." });
       }
-  
-      // Soft delete: isDeleted alanını true yapıyoruz
-      appointment.isDeleted = true;
-      appointment.lastEditBy = currentUserId;
-      appointment.lastEditDate = new Date();
-  
-      await appointment.save();
-  
-      return res.status(200).json({ success: true, message: "Randevu başarıyla silindi" });
-    } catch (error) {
-      console.error("Randevu silme hatası:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Randevu silinemedi",
-        error: error.message,
-      });
+      updateData.appointmentDateTime = newDate;
     }
-  };
-  
+
+    // lastEditBy ve lastEditDate ayarlanıyor (req.user, authentication middleware tarafından doldurulmalı)
+    updateData.lastEditBy = req.user._id;
+    updateData.lastEditDate = new Date();
+
+    // Eğer status "İptal Edildi" veya "Tamamlandı" ise actions sabitlenir
+    if (["İptal Edildi", "Tamamlandı"].includes(updateData.status)) {
+      updateData.actions = {
+        payNow: false,
+        reBook: true,
+        edit: false,
+        view: true
+      };
+    } else if (!updateData.actions) {
+      // Diğer durumlarda varsayılan actions
+      updateData.actions = {
+        payNow: true,
+        reBook: false,
+        edit: true,
+        view: true
+      };
+    }
+
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      appointmentId,
+      updateData,
+      { new: true }
+    );
+
+    if (!updatedAppointment) {
+      return res.status(404).json({ success: false, message: "Randevu bulunamadı." });
+    }
+
+    return res.status(200).json({ success: true, appointment: updatedAppointment });
+  } catch (err) {
+    console.error("Update Appointment Error:", err);
+    return res.status(500).json({ success: false, message: "Randevu güncellenirken bir hata oluştu." });
+  }
+};
+
+/**
+ * Randevuyu Soft Delete Yap (isDeleted = true)
+ */
+exports.softDeleteAppointment = async (req, res) => {
+  try {
+    const appointmentId = req.params.id;
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      appointmentId,
+      {
+        isDeleted: true,
+        lastEditBy: req.user._id,
+        lastEditDate: new Date()
+      },
+      { new: true }
+    );
+
+    if (!updatedAppointment) {
+      return res.status(404).json({ success: false, message: "Randevu bulunamadı." });
+    }
+
+    return res.status(200).json({ success: true, appointment: updatedAppointment });
+  } catch (err) {
+    console.error("Soft Delete Appointment Error:", err);
+    return res.status(500).json({ success: false, message: "Randevu silinirken bir hata oluştu." });
+  }
+};
+
+/**
+ * Cron Job Fonksiyonu: Randevu tarihine göre otomatik status güncellemesi.
+ * - Eğer randevu tarihi geçmiş ve hala "Açık" ise, ödeme yapılmadıysa "Ödeme Bekleniyor" olarak güncellenir.
+ * - Eğer ilgili ödeme varsa ve ödeme tamamlanmışsa "Tamamlandı" olarak ayarlanır.
+ */
+exports.updateAppointmentStatuses = async () => {
+  try {
+    const now = new Date();
+
+    // "Açık" durumda olan, randevu tarihi geçmiş ve silinmemiş randevuları bul
+    const appointmentsToUpdate = await Appointment.find({
+      status: "Açık",
+      appointmentDateTime: { $lt: now },
+      isDeleted: false
+    });
+
+    for (let appointment of appointmentsToUpdate) {
+      // İlgili ödeme olup olmadığını kontrol et
+      const payment = await Payment.findOne({
+        appointmentId: appointment._id,
+        isDeleted: false
+      });
+
+      if (payment && payment.paymentStatus === "Tamamlandı") {
+        appointment.status = "Tamamlandı";
+        appointment.actions = { payNow: false, reBook: true, edit: false, view: true };
+      } else {
+        appointment.status = "Ödeme Bekleniyor";
+        appointment.actions = { payNow: true, reBook: false, edit: true, view: true };
+      }
+      appointment.lastEditDate = now;
+      await appointment.save();
+    }
+
+    console.log(`Cron Job: ${appointmentsToUpdate.length} randevu güncellendi.`);
+  } catch (err) {
+    console.error("Cron Job Error:", err);
+  }
+};

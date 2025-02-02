@@ -18,7 +18,7 @@ const paymentSchema = new mongoose.Schema({
     required: true,
   },
   serviceId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: [mongoose.Schema.Types.ObjectId],
     ref: "Services",
     required: true,
   },
