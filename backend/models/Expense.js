@@ -9,7 +9,7 @@ const expenseSchema = new mongoose.Schema({
   clinicId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Clinic",
-    required: true,
+    required: false,
   },
   currencyId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -26,7 +26,7 @@ const expenseSchema = new mongoose.Schema({
   },
   expenseKind: {
     type: String,
-    enum: ["Fixed", "General"],
+    enum: ["Sabit", "Genel"],
     required: true,
   },
   expenseAmount: {

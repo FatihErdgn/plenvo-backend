@@ -1,11 +1,12 @@
 const Expense = require("../models/Expense");
+const Currency = require("../models/Currency");
 
 /**
  * createExpense: Yeni bir gider oluşturur.
- * 
+ *
  * Beklenen req.body alanları:
- * - expenseCategory, expenseDescription, expenseKind, expenseAmount, expenseDate, curenncyId
- * 
+ * - expenseCategory, expenseDescription, expenseKind, expenseAmount, expenseDate, currencyId
+ *
  * Token üzerinden alınan:
  * - customerId, clinicId, ve kullanıcı id'si (lastEditBy)
  */
@@ -17,36 +18,55 @@ exports.createExpense = async (req, res) => {
       expenseKind,
       expenseAmount,
       expenseDate,
-      curenncyId
+      currencyName,
     } = req.body;
 
     // Gerekli alan kontrolü
-    if (!expenseCategory || !expenseDescription || !expenseKind || !expenseAmount || !expenseDate || !curenncyId) {
+    if (
+      !expenseCategory ||
+      !expenseDescription ||
+      !expenseKind ||
+      !expenseAmount ||
+      !expenseDate ||
+      !currencyName
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Tüm alanlar zorunludur."
+        message: "Tüm alanlar zorunludur.",
+      });
+    }
+
+    const foundCurrency = await Currency.findOne({ currencyName });
+    if (!foundCurrency) {
+      return res.status(400).json({
+        success: false,
+        message: `Geçersiz para birimi ismi: ${currencyName}`,
       });
     }
 
     // Tarih validasyonu
     const parsedDate = new Date(expenseDate);
-    if (isNaN(parsedDate.getTime())) {
+    const isValidDate = parsedDate instanceof Date && !isNaN(parsedDate);
+
+    if (!isValidDate) {
       return res.status(400).json({
         success: false,
-        message: "Geçersiz tarih formatı."
+        message: "Geçersiz tarih formatı.",
       });
     }
 
     // Token'dan müşteri ve klinik bilgileri (authentication middleware req.user'ı doldurmalı)
     const customerId = req.user.customerId;
     const clinicId = req.user.clinicId;
-    const lastEditBy = req.user._id;
+    const lastEditBy = req.user.userId;
     const lastEditDate = new Date();
+    console.log("lastEditBy", lastEditBy);
+    console.log("customerId", customerId);
 
     const newExpense = new Expense({
       customerId,
       clinicId,
-      curenncyId, // Modeldeki alan adı
+      currencyId: foundCurrency._id, // Modeldeki alan adı
       expenseCategory,
       expenseDescription,
       expenseKind,
@@ -54,20 +74,23 @@ exports.createExpense = async (req, res) => {
       expenseDate: parsedDate,
       isDeleted: false,
       lastEditBy,
-      lastEditDate
+      lastEditDate,
     });
 
     const savedExpense = await newExpense.save();
     return res.status(201).json({ success: true, expense: savedExpense });
   } catch (error) {
     console.error("Create Expense Error:", error);
-    return res.status(500).json({ success: false, message: "Gider oluşturulurken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Gider oluşturulurken bir hata oluştu.",
+    });
   }
 };
 
 /**
  * updateExpense: Varolan bir gideri günceller.
- * 
+ *
  * req.params.id ile giderin id'si, req.body ile güncellenmek istenen alanlar gönderilir.
  * Tarih güncellemesi yapılırsa validasyon gerçekleştirilir.
  * lastEditBy ve lastEditDate token üzerinden güncellenir.
@@ -80,7 +103,9 @@ exports.updateExpense = async (req, res) => {
     if (updateData.expenseDate) {
       const parsedDate = new Date(updateData.expenseDate);
       if (isNaN(parsedDate.getTime())) {
-        return res.status(400).json({ success: false, message: "Geçersiz tarih formatı." });
+        return res
+          .status(400)
+          .json({ success: false, message: "Geçersiz tarih formatı." });
       }
       updateData.expenseDate = parsedDate;
     }
@@ -89,14 +114,23 @@ exports.updateExpense = async (req, res) => {
     updateData.lastEditBy = req.user._id;
     updateData.lastEditDate = new Date();
 
-    const updatedExpense = await Expense.findByIdAndUpdate(expenseId, updateData, { new: true });
+    const updatedExpense = await Expense.findByIdAndUpdate(
+      expenseId,
+      updateData,
+      { new: true }
+    );
     if (!updatedExpense) {
-      return res.status(404).json({ success: false, message: "Gider bulunamadı." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Gider bulunamadı." });
     }
     return res.status(200).json({ success: true, expense: updatedExpense });
   } catch (error) {
     console.error("Update Expense Error:", error);
-    return res.status(500).json({ success: false, message: "Gider güncellenirken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Gider güncellenirken bir hata oluştu.",
+    });
   }
 };
 
@@ -109,17 +143,25 @@ exports.softDeleteExpense = async (req, res) => {
     const updateData = {
       isDeleted: true,
       lastEditBy: req.user._id,
-      lastEditDate: new Date()
+      lastEditDate: new Date(),
     };
 
-    const deletedExpense = await Expense.findByIdAndUpdate(expenseId, updateData, { new: true });
+    const deletedExpense = await Expense.findByIdAndUpdate(
+      expenseId,
+      updateData,
+      { new: true }
+    );
     if (!deletedExpense) {
-      return res.status(404).json({ success: false, message: "Gider bulunamadı." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Gider bulunamadı." });
     }
     return res.status(200).json({ success: true, expense: deletedExpense });
   } catch (error) {
     console.error("Soft Delete Expense Error:", error);
-    return res.status(500).json({ success: false, message: "Gider silinirken bir hata oluştu." });
+    return res
+      .status(500)
+      .json({ success: false, message: "Gider silinirken bir hata oluştu." });
   }
 };
 
@@ -149,10 +191,12 @@ exports.getExpenses = async (req, res) => {
       expenses,
       total,
       page,
-      pages: Math.ceil(total / limit)
+      pages: Math.ceil(total / limit),
     });
   } catch (error) {
     console.error("Get Expenses Error:", error);
-    return res.status(500).json({ success: false, message: "Giderler alınırken bir hata oluştu." });
+    return res
+      .status(500)
+      .json({ success: false, message: "Giderler alınırken bir hata oluştu." });
   }
 };

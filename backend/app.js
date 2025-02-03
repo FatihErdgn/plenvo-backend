@@ -88,5 +88,14 @@ app.use("/api/roles", roleRoutes);
 const reminderRoutes = require("./routes/reminderRoutes");
 app.use("/api/reminders", reminderRoutes);
 
+// const appointmentRoutes = require("./routes/appointmentRoutes");
+// app.use("/api/appointments", appointmentRoutes);
+
+const expenseRoutes = require("./routes/expenseRoutes");
+app.use("/api/expenses", expenseRoutes);
+
+const currencyRoutes = require("./routes/currencyRoutes");
+app.use("/api/currencies", currencyRoutes);
+
 // Tüm rotalardan sonra error handler
 app.use(errorHandler);
