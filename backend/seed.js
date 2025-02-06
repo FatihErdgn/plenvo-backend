@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 const Role = require("./models/Role");
 const Customer = require("./models/Customer");
 const User = require("./models/User");
+const Currency = require("./models/Currency");
 
 // Asıl seed fonksiyon
 async function seedSuperadmin() {
@@ -72,6 +73,26 @@ async function seedSuperadmin() {
     await superadminUser.save();
     console.log("Superadmin kullanıcı oluşturuldu.");
   }
+
+  // yeni currency
+  const currencyTRY = new Currency({
+    currencyName: "TRY",
+  });
+
+  // yeni currency
+  const currencyEUR = new Currency({
+    currencyName: "EUR",
+  });
+
+  // yeni currency
+  const currencyUSD = new Currency({
+    currencyName: "USD",
+  });
+
+  await currencyTRY.save();
+  await currencyEUR.save();
+  await currencyUSD.save();
+  console.log("para birimleri oluşturuldu.");
 }
 
 // Bu dosya tek başına çalıştırılınca devreye girsin:

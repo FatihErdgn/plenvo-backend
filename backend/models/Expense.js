@@ -26,7 +26,7 @@ const expenseSchema = new mongoose.Schema({
   },
   expenseKind: {
     type: String,
-    enum: ["Sabit", "Genel"],
+    // enum: ["Sabit", "Genel"],
     required: true,
   },
   expenseAmount: {

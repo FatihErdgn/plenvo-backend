@@ -170,33 +170,38 @@ exports.softDeleteExpense = async (req, res) => {
  */
 exports.getExpenses = async (req, res) => {
   try {
-    // Sayfalama parametreleri
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    // Sadece silinmemiş ve token üzerinden gelen customerId'ye ait giderler
+    // Token üzerinden gelen customerId bilgisi
     const customerId = req.user.customerId;
-    const query = { customerId, isDeleted: false };
 
-    const total = await Expense.countDocuments(query);
+    // Eğer customerId varsa ilgili kullanıcının verilerini getir, yoksa tüm verileri getir
+    const query = customerId ? { customerId, isDeleted: false } : { isDeleted: false };
+
     const expenses = await Expense.find(query)
+      .populate({
+        path: "currencyId",
+        select: "currencyName -_id", // Sadece "currencyName" alanını getir, "_id"yi getirme
+      })
       .sort({ expenseDate: -1 }) // En güncelden en eskiye sıralama
-      .skip(skip)
-      .limit(limit)
       .lean();
+
+    // currencyId nesne olarak dönecek, sadece currencyName almamız lazım
+    const transformedExpenses = expenses.map(expense => ({
+      ...expense,
+      currencyName: expense.currencyId.currencyName, // currencyName'i ekliyoruz
+    }));
 
     return res.status(200).json({
       success: true,
-      expenses,
-      total,
-      page,
-      pages: Math.ceil(total / limit),
+      expense: transformedExpenses, // Güncellenmiş veriyi gönderiyoruz
     });
   } catch (error) {
     console.error("Get Expenses Error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Giderler alınırken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Giderler alınırken bir hata oluştu.",
+    });
   }
 };
+
+
+
