@@ -88,6 +88,12 @@ app.use("/api/roles", roleRoutes);
 const serviceRoutes = require("./routes/serviceRoutes");
 app.use("/api/services", serviceRoutes);
 
+const appointmentRoutes = require("./routes/appointmentRoutes");
+app.use("/api/appointments", appointmentRoutes);
+
+const paymentRoutes = require("./routes/paymentRoutes");
+app.use("/api/payments", paymentRoutes);
+
 const reminderRoutes = require("./routes/reminderRoutes");
 app.use("/api/reminders", reminderRoutes);
 
