@@ -9,7 +9,7 @@ const participantSchema = new mongoose.Schema(
     lastName: { type: String, required: true },
     phoneNumber: { type: String },
     gender: { type: String },
-    age: { type: Number }
+    age: { type: Number },
   },
   { _id: false } // Her participant için ayrı _id üretme
 );
@@ -20,7 +20,7 @@ const actionsSchema = new mongoose.Schema(
     payNow: { type: Boolean, default: false },
     reBook: { type: Boolean, default: false },
     edit: { type: Boolean, default: false },
-    view: { type: Boolean, default: false }
+    view: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -28,23 +28,31 @@ const actionsSchema = new mongoose.Schema(
 // Asıl appointment şeması
 const appointmentSchema = new mongoose.Schema({
   // JSON'daki "id" değeri
-  customerId: {type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true},
-  clinicId: {type: mongoose.Schema.Types.ObjectId, ref: "Clinic", required: true},
-  paymentId: {type: mongoose.Schema.Types.ObjectId, ref: "Payment"},
+  customerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Customer",
+    required: true,
+  },
+  clinicId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Clinic",
+    required: true,
+  },
+  paymentId: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" },
   doctorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   // single / group
   type: {
     type: String,
     required: true,
-    enum: ["single", "group"] // İsterseniz enum kullanabilirsiniz
+    enum: ["single", "group"], // İsterseniz enum kullanabilirsiniz
   },
 
-  firstName: { type: String },
-  lastName: { type: String },
+  clientFirstName: { type: String },
+  clientLastName: { type: String },
   phoneNumber: { type: String },
 
   // "13-Aug-2023 10:00:00" gibi string'i kaydederken Date'e çevirerek ekleyebilirsiniz
-  appointmentDateTime: { type: Date, required: true },
+  datetime: { type: Date, required: true },
 
   // Örnek: "Açık", "Ödeme Bekleniyor", "Tamamlandı", "İptal Edildi" ...
   // Sabitlemek isterseniz enum tanımlayabilirsiniz
@@ -61,7 +69,7 @@ const appointmentSchema = new mongoose.Schema({
   participants: [participantSchema],
   isDeleted: { type: Boolean, default: false }, // Soft delete alanı
   lastEditBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  lastEditDate: { type: Date }
+  lastEditDate: { type: Date },
 });
 
 appointmentSchema.pre("save", function (next) {

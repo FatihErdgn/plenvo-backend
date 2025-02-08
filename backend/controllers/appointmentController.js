@@ -2,6 +2,7 @@
 
 const Appointment = require("../models/Appointment");
 const User = require("../models/User");
+const Clinic = require("../models/Clinic");
 const generateUniqueAppointmentCode = require("../utils/uniqueAppointmentCode");
 
 // createAppointment: Randevu oluşturma
@@ -9,24 +10,24 @@ exports.createAppointment = async (req, res) => {
   try {
     // Frontend'den gelen alanlar
     const {
-      firstName,
-      lastName,
+      clientFirstName,
+      clientLastName,
       phoneNumber,
-      appointmentDateTime,
+      datetime,
       gender,
       age,
-      clinic,   // Bu alan frontend'den gelse de, clinicId token'dan alınacak
-      doctor,   // Doktor adı, örn. "Dr. Anthony Hopkins"
-      type,     // "single" veya "group"
-      participants // (Opsiyonel) grup randevularında
+      clinic, // Bu alan frontend'den gelse de, clinicId token'dan alınacak
+      doctor, // Doktor adı, örn. "Dr. Anthony Hopkins"
+      type, // "single" veya "group"
+      participants, // (Opsiyonel) grup randevularında
     } = req.body;
 
     // Gerekli alan kontrolü
     if (
-      !firstName ||
-      !lastName ||
+      !clientFirstName ||
+      !clientLastName ||
       !phoneNumber ||
-      !appointmentDateTime ||
+      !datetime ||
       !gender ||
       !age ||
       !clinic ||
@@ -35,16 +36,16 @@ exports.createAppointment = async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Gerekli tüm alanlar doldurulmalıdır."
+        message: "Gerekli tüm alanlar doldurulmalıdır.",
       });
     }
 
     // Randevu tarihini parse et (örneğin "13-Aug-2023 10:00:00")
-    const apptDate = new Date(appointmentDateTime);
+    const apptDate = new Date(datetime);
     if (isNaN(apptDate.getTime())) {
       return res.status(400).json({
         success: false,
-        message: "Geçersiz randevu tarihi."
+        message: "Geçersiz randevu tarihi.",
       });
     }
 
@@ -53,7 +54,7 @@ exports.createAppointment = async (req, res) => {
       payNow: true,
       reBook: false,
       edit: true,
-      view: true
+      view: true,
     };
     let status = "Açık";
     // Eğer randevu tarihi geçmişse, status başlangıçta "Ödeme Bekleniyor" olabilir.
@@ -63,10 +64,17 @@ exports.createAppointment = async (req, res) => {
 
     // Token'dan customerId ve clinicId alınır (authentication middleware req.user'ı doldurmalı)
     const customerId = req.user.customerId;
-    const clinicId = req.user.clinicId;
 
     // paymentId başlangıçta null
     const paymentId = null;
+
+    const foundClinic = await Clinic.findOne({ clinicName: clinic });
+    if (!foundClinic) {
+      return res.status(404).json({
+        success: false,
+        message: "Belirtilen klinik bulunamadı.",
+      });
+    }
 
     // Doktor bilgisi: Frontend'den gelen doktor adını kullanarak User modelinde arama yap
     let doctorName = doctor;
@@ -78,19 +86,19 @@ exports.createAppointment = async (req, res) => {
     if (nameParts.length < 2) {
       return res.status(400).json({
         success: false,
-        message: "Geçersiz doktor adı."
+        message: "Geçersiz doktor adı.",
       });
     }
     const doctorFirstName = nameParts[0];
     const doctorLastName = nameParts.slice(1).join(" ");
     const doctorUser = await User.findOne({
       firstName: doctorFirstName,
-      lastName: doctorLastName
+      lastName: doctorLastName,
     });
     if (!doctorUser) {
       return res.status(404).json({
         success: false,
-        message: "Belirtilen doktor bulunamadı."
+        message: "Belirtilen doktor bulunamadı.",
       });
     }
     const doctorId = doctorUser._id;
@@ -101,33 +109,33 @@ exports.createAppointment = async (req, res) => {
     // Yeni Appointment belgesini oluştur
     const newAppointment = new Appointment({
       customerId,
-      clinicId,
+      clinicId: foundClinic._id,
       paymentId,
       doctorId,
       type,
-      firstName,
-      lastName,
+      clientFirstName,
+      clientLastName,
       phoneNumber,
-      appointmentDateTime: apptDate,
+      datetime: apptDate,
       status,
       actions,
       gender,
       age,
       uniqueCode,
       // Eğer grup randevusuysa, varsa katılımcıları ekle
-      participants: type === "group" && participants ? participants : []
+      participants: type === "group" && participants ? participants : [],
     });
 
     const savedAppointment = await newAppointment.save();
     return res.status(201).json({
       success: true,
-      appointment: savedAppointment
+      appointment: savedAppointment,
     });
   } catch (err) {
     console.error("Create Appointment Error:", err);
     return res.status(500).json({
       success: false,
-      message: "Randevu oluşturulurken bir hata oluştu."
+      message: "Randevu oluşturulurken bir hata oluştu.",
     });
   }
 };
@@ -135,37 +143,35 @@ exports.createAppointment = async (req, res) => {
 // getAppointments: Sayfalama ve sıralı randevu listesi getirme
 exports.getAppointments = async (req, res) => {
   try {
-    // Query parametreleri (sayfa ve limit)
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
     // Sadece ilgili müşteriye ait randevuları getir (token'dan customerId)
     const customerId = req.user.customerId;
-    // Filtre: soft delete aktif değil
-    const query = { customerId, isDeleted: false };
-
-    // Toplam belge sayısı (sayfalama için)
-    const total = await Appointment.countDocuments(query);
+    const query = customerId
+      ? { customerId, isDeleted: false }
+      : { isDeleted: false };
 
     const appointments = await Appointment.find(query)
-      .sort({ appointmentDateTime: -1 }) // en güncelden en eskiye
-      .skip(skip)
-      .limit(limit)
+      .populate("clinicId", "clinicName")
+      .populate("doctorId", "firstName lastName")
+      .sort({ datetime: -1 }) // Son eklenen en üstte
       .lean();
+
+    const transformedAppointments = appointments.map((appointment) => {
+      return {
+        ...appointment,
+        clinicName: appointment.clinicId.clinicName,
+        doctorName: `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`,
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      appointments,
-      total,
-      page,
-      pages: Math.ceil(total / limit)
+      data: transformedAppointments,
     });
   } catch (err) {
     console.error("Get Appointments Error:", err);
     return res.status(500).json({
       success: false,
-      message: "Randevular alınırken bir hata oluştu."
+      message: "Randevular alınırken bir hata oluştu.",
     });
   }
 };
@@ -173,7 +179,7 @@ exports.getAppointments = async (req, res) => {
 /**
  * Randevu Güncelleme (Edit)
  * Frontend'den gelen güncellenmiş alanlarla randevuyu düzenler.
- * - Güncellenen alanlar: firstName, lastName, phoneNumber, appointmentDateTime, gender, age, clinic, doctor, type, participants, status vb.
+ * - Güncellenen alanlar: clientFirstName, clientLastName, phoneNumber, datetime, gender, age, clinic, doctor, type, participants, status vb.
  * - Eğer status "İptal Edildi" veya "Tamamlandı" ise actions güncellenir.
  * - Güncellemede, lastEditBy ve lastEditDate token'dan gelen kullanıcıyla ayarlanır.
  */
@@ -183,12 +189,14 @@ exports.updateAppointment = async (req, res) => {
     const updateData = req.body;
 
     // Zorunlu alanlarda validasyon yapabilirsiniz
-    if (updateData.appointmentDateTime) {
-      const newDate = new Date(updateData.appointmentDateTime);
+    if (updateData.datetime) {
+      const newDate = new Date(updateData.datetime);
       if (isNaN(newDate.getTime())) {
-        return res.status(400).json({ success: false, message: "Geçersiz tarih formatı." });
+        return res
+          .status(400)
+          .json({ success: false, message: "Geçersiz tarih formatı." });
       }
-      updateData.appointmentDateTime = newDate;
+      updateData.datetime = newDate;
     }
 
     // lastEditBy ve lastEditDate ayarlanıyor (req.user, authentication middleware tarafından doldurulmalı)
@@ -201,7 +209,7 @@ exports.updateAppointment = async (req, res) => {
         payNow: false,
         reBook: true,
         edit: false,
-        view: true
+        view: true,
       };
     } else if (!updateData.actions) {
       // Diğer durumlarda varsayılan actions
@@ -209,7 +217,7 @@ exports.updateAppointment = async (req, res) => {
         payNow: true,
         reBook: false,
         edit: true,
-        view: true
+        view: true,
       };
     }
 
@@ -220,13 +228,20 @@ exports.updateAppointment = async (req, res) => {
     );
 
     if (!updatedAppointment) {
-      return res.status(404).json({ success: false, message: "Randevu bulunamadı." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Randevu bulunamadı." });
     }
 
-    return res.status(200).json({ success: true, appointment: updatedAppointment });
+    return res
+      .status(200)
+      .json({ success: true, appointment: updatedAppointment });
   } catch (err) {
     console.error("Update Appointment Error:", err);
-    return res.status(500).json({ success: false, message: "Randevu güncellenirken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Randevu güncellenirken bir hata oluştu.",
+    });
   }
 };
 
@@ -241,19 +256,25 @@ exports.softDeleteAppointment = async (req, res) => {
       {
         isDeleted: true,
         lastEditBy: req.user._id,
-        lastEditDate: new Date()
+        lastEditDate: new Date(),
       },
       { new: true }
     );
 
     if (!updatedAppointment) {
-      return res.status(404).json({ success: false, message: "Randevu bulunamadı." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Randevu bulunamadı." });
     }
 
-    return res.status(200).json({ success: true, appointment: updatedAppointment });
+    return res
+      .status(200)
+      .json({ success: true, appointment: updatedAppointment });
   } catch (err) {
     console.error("Soft Delete Appointment Error:", err);
-    return res.status(500).json({ success: false, message: "Randevu silinirken bir hata oluştu." });
+    return res
+      .status(500)
+      .json({ success: false, message: "Randevu silinirken bir hata oluştu." });
   }
 };
 
@@ -269,29 +290,41 @@ exports.updateAppointmentStatuses = async () => {
     // "Açık" durumda olan, randevu tarihi geçmiş ve silinmemiş randevuları bul
     const appointmentsToUpdate = await Appointment.find({
       status: "Açık",
-      appointmentDateTime: { $lt: now },
-      isDeleted: false
+      datetime: { $lt: now },
+      isDeleted: false,
     });
 
     for (let appointment of appointmentsToUpdate) {
       // İlgili ödeme olup olmadığını kontrol et
       const payment = await Payment.findOne({
         appointmentId: appointment._id,
-        isDeleted: false
+        isDeleted: false,
       });
 
       if (payment && payment.paymentStatus === "Tamamlandı") {
         appointment.status = "Tamamlandı";
-        appointment.actions = { payNow: false, reBook: true, edit: false, view: true };
+        appointment.actions = {
+          payNow: false,
+          reBook: true,
+          edit: false,
+          view: true,
+        };
       } else {
         appointment.status = "Ödeme Bekleniyor";
-        appointment.actions = { payNow: true, reBook: false, edit: true, view: true };
+        appointment.actions = {
+          payNow: true,
+          reBook: false,
+          edit: true,
+          view: true,
+        };
       }
       appointment.lastEditDate = now;
       await appointment.save();
     }
 
-    console.log(`Cron Job: ${appointmentsToUpdate.length} randevu güncellendi.`);
+    console.log(
+      `Cron Job: ${appointmentsToUpdate.length} randevu güncellendi.`
+    );
   } catch (err) {
     console.error("Cron Job Error:", err);
   }

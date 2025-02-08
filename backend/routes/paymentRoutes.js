@@ -5,13 +5,13 @@ const paymentController = require("../controllers/paymentController");
 const { authMiddleware } = require("../middlewares/authMiddleware");
 const { checkPermission } = require("../middlewares/checkPermission");
 
-// Kullanıcı CRUD ve şifre değiştirme
-router.get(
-  "/",
-  authMiddleware,
-  checkPermission(["admin", "superadmin", "consultant", "manager"]),
-  paymentController.getAllPayments
-);
+// // Kullanıcı CRUD ve şifre değiştirme
+// router.get(
+//   "/",
+//   authMiddleware,
+//   checkPermission(["admin", "superadmin", "consultant", "manager"]),
+//   paymentController.getAllPayments
+// );
 router.post(
   "/",
   authMiddleware,
