@@ -1,5 +1,5 @@
 const Services = require("../models/Services");
-
+const Currency = require("../models/Currency");
 /**
  * createService: Yeni bir servis (hizmet) oluşturur.
  * Beklenen req.body alanları:
@@ -12,14 +12,17 @@ const Services = require("../models/Services");
  */
 exports.createService = async (req, res) => {
   try {
+    // Sadece admin ve superadmin bu işlemi yapabilir
+    const { role } = req.user; // JWT'den gelen role
+    if (role !== "admin" && role !== "superadmin") {
+      return res.status(403).json({ success: false, message: "Yetkiniz yok." });
+    }
     const {
       serviceName,
       provider,
       validityDate,
       serviceFee,
-      serviceDescription,
-      currencyId,
-      actions,
+      currencyName,
       status,
     } = req.body;
 
@@ -29,8 +32,7 @@ exports.createService = async (req, res) => {
       !provider ||
       !validityDate ||
       !serviceFee ||
-      !serviceDescription ||
-      !currencyId
+      !currencyName
     ) {
       return res.status(400).json({
         success: false,
@@ -47,37 +49,42 @@ exports.createService = async (req, res) => {
       });
     }
 
+    const foundCurrency = await Currency.findOne({ currencyName });
+    if (!foundCurrency) {
+      return res.status(404).json({
+        success: false,
+        message: "Belirtilen para birimi bulunamadı.",
+      });
+    }
+
     // Token üzerinden alınan bilgiler (authentication middleware req.user'ı doldurmalı)
     const customerId = req.user.customerId;
     const clinicId = req.user.clinicId;
-    const userId = req.user._id; // Servisi oluşturan kişi
-    const lastEditBy = req.user._id;
-    const lastEditDate = new Date();
+    const userId = req.user.userId; // Servisi oluşturan kişi
+    const lastEditBy = req.user.userId;
 
     const newService = new Services({
       customerId,
       clinicId,
       userId,
-      currencyId,
+      currencyId: foundCurrency._id,
       serviceName,
       provider,
       validityDate: parsedValidityDate,
       serviceFee,
-      serviceDescription,
       status: status || "active",
-      actions: actions || { edit: true, view: true },
       isDeleted: false,
       lastEditBy,
-      lastEditDate,
     });
 
     const savedService = await newService.save();
     return res.status(201).json({ success: true, service: savedService });
   } catch (err) {
     console.error("Create Service Error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Servis oluşturulurken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Servis oluşturulurken bir hata oluştu.",
+    });
   }
 };
 
@@ -89,6 +96,10 @@ exports.createService = async (req, res) => {
  */
 exports.updateService = async (req, res) => {
   try {
+    const { role } = req.user; // JWT'den gelen role
+    if (role !== "admin" && role !== "superadmin") {
+      return res.status(403).json({ success: false, message: "Yetkiniz yok." });
+    }
     const serviceId = req.params.id;
     const updateData = req.body;
 
@@ -103,7 +114,7 @@ exports.updateService = async (req, res) => {
     }
 
     // Güncelleme sırasında lastEditBy ve lastEditDate ayarlanır.
-    updateData.lastEditBy = req.user._id;
+    updateData.lastEditBy = req.user.userId;
     updateData.lastEditDate = new Date();
 
     const updatedService = await Services.findByIdAndUpdate(
@@ -119,9 +130,10 @@ exports.updateService = async (req, res) => {
     return res.status(200).json({ success: true, service: updatedService });
   } catch (err) {
     console.error("Update Service Error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Servis güncellenirken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Servis güncellenirken bir hata oluştu.",
+    });
   }
 };
 
@@ -161,32 +173,33 @@ exports.softDeleteService = async (req, res) => {
  */
 exports.getServices = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
     // Token üzerinden gelen customerId'ye göre filtreleme
     const customerId = req.user.customerId;
-    const query = { customerId, isDeleted: false };
+    const query = customerId
+      ? { customerId, isDeleted: false }
+      : { isDeleted: false };
 
-    const total = await Services.countDocuments(query);
     const services = await Services.find(query)
+      .populate({ path: "currencyId", select: "currencyName" })
       .sort({ validityDate: -1 }) // En güncel validityDate'e göre sıralama
-      .skip(skip)
-      .limit(limit)
       .lean();
+
+    const transformedServices = services.map((service) => {
+      return {
+        ...service,
+        currencyName: service.currencyId.currencyName,
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      services,
-      total,
-      page,
-      pages: Math.ceil(total / limit),
+      data: transformedServices,
     });
   } catch (err) {
     console.error("Get Services Error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Servisler alınırken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Servisler alınırken bir hata oluştu.",
+    });
   }
 };

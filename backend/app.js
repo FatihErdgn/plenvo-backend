@@ -85,6 +85,9 @@ app.use("/api/users", userRoutes);
 const roleRoutes = require("./routes/roleRoutes");
 app.use("/api/roles", roleRoutes);
 
+const serviceRoutes = require("./routes/serviceRoutes");
+app.use("/api/services", serviceRoutes);
+
 const reminderRoutes = require("./routes/reminderRoutes");
 app.use("/api/reminders", reminderRoutes);
 

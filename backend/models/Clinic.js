@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const clinicSchema = new mongoose.Schema({
-    hospitalId: {
+    customerId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Customer",
         required: true,
@@ -9,11 +9,7 @@ const clinicSchema = new mongoose.Schema({
     clinicName: {
         type: String,
         required: true,
-    },
-    clinicDescription: {
-        type: String,
-        required: true,
-    },
+    }
 });
 
 module.exports = mongoose.model("Clinic", clinicSchema);

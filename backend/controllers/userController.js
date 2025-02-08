@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const Role = require("../models/Role");
+const Clinic = require("../models/Clinic");
 const bcrypt = require("bcryptjs");
 const { isValidPassword } = require("../utils/passwordValidation");
 const { generateRandomPassword } = require("../utils/passwordGenerator");
@@ -23,19 +24,49 @@ exports.createUser = async (req, res) => {
       speciality,
       salary,
       phoneNumber,
+      clinic,
       hireDate,
-      clinicId,
-      customerId,
+      // clinicId,
+      // customerId,
       password, // Şifre front-end'den geliyor
       roleName, // Front-end'den sadece roleName gelecek (doctor, manager vs.)
     } = req.body;
 
+    const existingUser = await User.findOne({
+      $or: [{ username }, { userMail }, { phoneNumber }],
+    });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Kullanıcı adı, e-posta veya telefon numarası zaten kullanılıyor.",
+      });
+    }
+
+    if (!roleName) {
+      return res
+        .status(400)
+        .json({ success: false, message: "roleName değeri zorunludur." });
+    }
+    const lowerCaseRoleName = roleName.toLowerCase();
+
     // Önce roleName'e göre Role dökümanını bulalım
-    const foundRole = await Role.findOne({ roleName });
+    const foundRole = await Role.findOne({ roleName: lowerCaseRoleName });
     if (!foundRole) {
       return res.status(400).json({
         success: false,
-        message: `Geçersiz rol ismi: ${roleName}`,
+        message: `Geçersiz rol ismi: ${lowerCaseRoleName}`,
+      });
+    }
+
+    // Tarih validasyonu
+    const parsedDate = new Date(hireDate);
+    const isValidDate = parsedDate instanceof Date && !isNaN(parsedDate);
+
+    if (!isValidDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçersiz tarih formatı.",
       });
     }
 
@@ -48,6 +79,14 @@ exports.createUser = async (req, res) => {
       });
     }
 
+    const newClinic = new Clinic({
+      customerId: req.user.customerId,
+      clinicName: clinic,
+    });
+    await newClinic.save();
+    // Token'dan müşteri ve klinik bilgileri (authentication middleware req.user'ı doldurmalı)
+    const customerId = req.user.customerId;
+
     // Yeni kullanıcı oluştur
     const newUser = new User({
       username,
@@ -58,8 +97,8 @@ exports.createUser = async (req, res) => {
       speciality,
       salary,
       phoneNumber,
-      hireDate,
-      clinicId,
+      hireDate: parsedDate,
+      clinicId: newClinic._id,
       customerId,
       password,
       roleId: foundRole._id, // Sadece roleId saklıyoruz
@@ -82,7 +121,8 @@ exports.createUser = async (req, res) => {
 // Kullanıcı bilgilerini düzenleme
 exports.updateUser = async (req, res) => {
   try {
-    const { role } = req.user;
+    const { role } = req.user; // JWT'den gelen kullanıcı rolü
+    // Sadece admin ve superadmin güncelleyebilsin
     if (role !== "admin" && role !== "superadmin") {
       return res.status(403).json({ success: false, message: "Yetkiniz yok." });
     }
@@ -90,7 +130,7 @@ exports.updateUser = async (req, res) => {
     const { id } = req.params; // Düzenlenecek kullanıcı ID'si
     const updatedData = { ...req.body };
 
-    // Eğer front-end yeni bir roleName gönderiyorsa, o roleName'e göre roleId bulmamız lazım
+    // 1) Gönderilen roleName varsa, Role tablosundan bulup user rolünü güncelle
     if (updatedData.roleName) {
       const foundRole = await Role.findOne({ roleName: updatedData.roleName });
       if (!foundRole) {
@@ -99,12 +139,26 @@ exports.updateUser = async (req, res) => {
           message: `Geçersiz rol ismi: ${updatedData.roleName}`,
         });
       }
-      // roleId'yi güncelle
       updatedData.roleId = foundRole._id;
-      // user schema'da roleName alanı yok, bu yüzden object'ten silebiliriz
-      delete updatedData.roleName;
+      delete updatedData.roleName; // user schema'da roleName direkt saklanmıyor
     }
 
+    // 2) Gönderilen clinicName varsa, Clinic tablosundan bulup clinicId'yi güncelle
+    if (updatedData.clinicName) {
+      const foundClinic = await Clinic.findOne({
+        clinicName: updatedData.clinicName,
+      });
+      if (!foundClinic) {
+        return res.status(400).json({
+          success: false,
+          message: `Geçersiz klinik ismi: ${updatedData.clinicName}`,
+        });
+      }
+      updatedData.clinicId = foundClinic._id;
+      delete updatedData.clinicName; // user schema'da clinicName direkt saklanmıyor
+    }
+
+    // 3) Kullanıcıyı bul
     const user = await User.findById(id);
     if (!user) {
       return res
@@ -112,12 +166,15 @@ exports.updateUser = async (req, res) => {
         .json({ success: false, message: "Kullanıcı bulunamadı." });
     }
 
-    // updatedData içindeki alanları user nesnesine kopyala
+    // 4) updatedData içindeki alanları user nesnesine kopyala
+    //    (örn. firstName, lastName, hireDate vb.)
     Object.assign(user, updatedData);
 
-    // Şifre güncelleniyorsa, pre('save') hook tetiklenecek ve hashlenecek
+    // 5) Şifre güncelleniyorsa, mongoose'un pre('save') hook'u tetiklenecek
+    //    ve orada hash işlemi yapılacak.
     await user.save();
 
+    // 6) Başarılı yanıt
     res
       .status(200)
       .json({ success: true, message: "Kullanıcı başarıyla güncellendi." });
@@ -160,14 +217,32 @@ exports.deleteUser = async (req, res) => {
 // Kullanıcıları listeleme
 exports.getUsers = async (req, res) => {
   try {
-    const { role } = req.user;
-    if (role !== "admin" && role !== "superadmin" && role !== "manager") {
-      return res.status(403).json({ success: false, message: "Yetkiniz yok." });
-    }
+    const customerId = req.user.customerId; // JWT'den gelen customerId
+
+    const query = customerId
+      ? { customerId, isDeleted: false }
+      : { isDeleted: false };
 
     // Tüm aktif (isDeleted=false) kullanıcılar. roleId populate edince roleName görünür.
-    const users = await User.find({ isDeleted: false }).populate("roleId");
-    res.status(200).json({ success: true, data: users });
+    const users = await User.find(query)
+      .populate({
+        path: "roleId",
+        select: "roleName",
+      })
+      .populate({
+        path: "clinicId",
+        select: "clinicName",
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+    const transformedUsers = users.map((user) => {
+      return {
+        ...user,
+        roleName: user.roleId?.roleName,
+        clinicName: user.clinicId?.clinicName,
+      };
+    });
+    res.status(200).json({ success: true, data: transformedUsers });
   } catch (err) {
     console.error(err);
     res
@@ -243,8 +318,7 @@ exports.forgotPassword = async (req, res) => {
     if (!user) {
       return res.status(200).json({
         success: true,
-        message:
-          "Yeni şifreniz gönderildi.",
+        message: "Yeni şifreniz gönderildi.",
       });
     }
 
@@ -259,7 +333,7 @@ exports.forgotPassword = async (req, res) => {
     if (user.phoneNumber) {
       const messageText = `Yeni şifreniz: ${newPassword}`;
       await sendSMS([user.phoneNumber], messageText);
-      
+
       return res.status(200).json({
         success: true,
         message: "Yeni şifreniz SMS ile gönderildi.",
@@ -269,9 +343,9 @@ exports.forgotPassword = async (req, res) => {
     // TODO: E-posta gönderim desteği eklenecek
     return res.status(400).json({
       success: false,
-      message: "Şifre sıfırlama için kayıtlı telefon numaranız veya email adresiniz bulunamadı.",
+      message:
+        "Şifre sıfırlama için kayıtlı telefon numaranız veya email adresiniz bulunamadı.",
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({
@@ -293,7 +367,9 @@ exports.getProfile = async (req, res) => {
 
     // Kullanıcı yoksa veya soft-deleted ise
     if (!user || user.isDeleted) {
-      return res.status(404).json({ success: false, message: "Kullanıcı bulunamadı." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Kullanıcı bulunamadı." });
     }
 
     // Başarılı => kullanıcıyı dön

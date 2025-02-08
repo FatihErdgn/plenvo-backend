@@ -8,7 +8,7 @@ const { checkPermission } = require("../middlewares/checkPermission");
 // Kullanıcı CRUD ve şifre değiştirme
 router.post("/", authMiddleware, checkPermission(["admin", "superadmin"]), userController.createUser);
 router.put("/:id", authMiddleware, checkPermission(["admin", "superadmin"]), userController.updateUser);
-router.delete("/:id", authMiddleware, checkPermission("admin"), userController.deleteUser);
+router.delete("/:id", authMiddleware, checkPermission(["admin", "superadmin"]), userController.deleteUser);
 router.get("/", authMiddleware, checkPermission(["manager", "admin", "superadmin"]), userController.getUsers);
 router.get("/profile", authMiddleware, userController.getProfile);
 router.post("/change-password", authMiddleware, userController.changePassword);

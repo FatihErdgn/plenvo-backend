@@ -1,42 +1,43 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const UserSchema = new mongoose.Schema({
-  // Artık sadece roleId tutuyoruz
-  roleId: { type: mongoose.Schema.Types.ObjectId, ref: "Role", required: true },
+const UserSchema = new mongoose.Schema(
+  {
+    // Artık sadece roleId tutuyoruz
+    roleId: { type: mongoose.Schema.Types.ObjectId, ref: "Role", required: true },
 
-  customerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Customer",
-    // Eğer superadmin ise customerId zorunlu değil
-    required: false,
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
+      required: false, // Eğer superadmin ise customerId zorunlu değil
+    },
+
+    clinicId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Clinic",
+      required: false, // Eğer superadmin ise clinicId zorunlu değil
+    },
+
+    username: { type: String, required: true, unique: true },
+    userMail: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+
+    firstName: { type: String, required: true },
+    lastName: { type: String, required: true },
+
+    phoneNumber: { type: String },
+
+    profession: { type: String },
+    speciality: { type: String },
+    salary: { type: Number },
+    hireDate: { type: Date },
+
+    isDeleted: { type: Boolean, default: false },
   },
-
-  clinicId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Clinic",
-    // Eğer superadmin ise clinicId zorunlu değil
-    required: false,
-  },
-
-  username: { type: String, required: true, unique: true },
-  userMail: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-
-  phoneNumber: { type: String },
-
-  profession: { type: String },
-  speciality: { type: String },
-  salary: { type: Number },
-  hireDate: { type: Date },
-
-  isDeleted: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
+  {
+    timestamps: true, // `createdAt` ve `updatedAt` otomatik olarak yönetilecek
+  }
+);
 
 // Şifre hashleme
 UserSchema.pre("save", async function (next) {

@@ -111,7 +111,7 @@ exports.updateExpense = async (req, res) => {
     }
 
     // Güncelleme sırasında son düzenleyen ve tarih bilgisi ayarlanır.
-    updateData.lastEditBy = req.user._id;
+    updateData.lastEditBy = req.user.userId;
     updateData.lastEditDate = new Date();
 
     const updatedExpense = await Expense.findByIdAndUpdate(
