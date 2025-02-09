@@ -5,25 +5,32 @@ const paymentController = require("../controllers/paymentController");
 const { authMiddleware } = require("../middlewares/authMiddleware");
 const { checkPermission } = require("../middlewares/checkPermission");
 
-// // Kullanıcı CRUD ve şifre değiştirme
-// router.get(
-//   "/",
-//   authMiddleware,
-//   checkPermission(["admin", "superadmin", "consultant", "manager"]),
-//   paymentController.getAllPayments
-// );
+// Belirli bir randevuya ait ödemeleri getiren endpoint.
+// Route örneği: GET /api/payments/appointment/:appointmentId
+router.get(
+  "/appointment/:appointmentId",
+  authMiddleware,
+  checkPermission(["admin", "superadmin", "consultant"]),
+  paymentController.getPaymentsByAppointment
+);
+
+// Yeni ödeme oluşturma endpoint'i
 router.post(
   "/",
   authMiddleware,
   checkPermission(["admin", "superadmin", "consultant"]),
   paymentController.createPayment
 );
+
+// Ödeme güncelleme endpoint'i
 router.put(
   "/:id",
   authMiddleware,
   checkPermission(["admin", "superadmin", "consultant"]),
   paymentController.updatePayment
 );
+
+// Ödeme soft delete endpoint'i
 router.delete(
   "/:id",
   authMiddleware,

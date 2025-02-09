@@ -3,12 +3,12 @@
 const Appointment = require("../models/Appointment");
 const User = require("../models/User");
 const Clinic = require("../models/Clinic");
+const Payment = require("../models/Payment");
 const generateUniqueAppointmentCode = require("../utils/uniqueAppointmentCode");
 
 // createAppointment: Randevu oluşturma
 exports.createAppointment = async (req, res) => {
   try {
-    // Frontend'den gelen alanlar
     const {
       clientFirstName,
       clientLastName,
@@ -16,27 +16,73 @@ exports.createAppointment = async (req, res) => {
       datetime,
       gender,
       age,
-      clinic, // Bu alan frontend'den gelse de, clinicId token'dan alınacak
-      doctor, // Doktor adı, örn. "Dr. Anthony Hopkins"
-      type, // "single" veya "group"
-      participants, // (Opsiyonel) grup randevularında
+      clinic,
+      doctor,
+      type,
+      participants,
     } = req.body;
 
-    // Gerekli alan kontrolü
-    if (
-      !clientFirstName ||
-      !clientLastName ||
-      !phoneNumber ||
-      !datetime ||
-      !gender ||
-      !age ||
-      !clinic ||
-      !doctor ||
-      !type
-    ) {
+    // Randevu tipi kontrolü
+    if (!type) {
       return res.status(400).json({
         success: false,
-        message: "Gerekli tüm alanlar doldurulmalıdır.",
+        message: "Randevu tipi belirtilmelidir.",
+      });
+    }
+
+    // Grup randevusu için gerekli alanlar
+    if (type === "group") {
+      if (
+        !clinic ||
+        !doctor ||
+        !datetime ||
+        !participants ||
+        !Array.isArray(participants) ||
+        participants.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Grup randevularında klinik, doktor, tarih ve en az bir katılımcı bilgisi doldurulmalıdır.",
+        });
+      }
+      // İsteğe bağlı: Her katılımcı için gerekli alanları kontrol edebilirsiniz.
+      for (const participant of participants) {
+        if (
+          !participant.clientFirstName ||
+          !participant.clientLastName ||
+          !participant.phoneNumber ||
+          !participant.gender ||
+          !participant.age
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "Her katılımcı için tüm alanlar doldurulmalıdır.",
+          });
+        }
+      }
+    }
+    // Tek kişilik randevu için gerekli alanlar
+    else if (type === "single") {
+      if (
+        !clientFirstName ||
+        !clientLastName ||
+        !phoneNumber ||
+        !datetime ||
+        !gender ||
+        !age ||
+        !clinic ||
+        !doctor
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Tek kişilik randevularda tüm alanlar doldurulmalıdır.",
+        });
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Geçersiz randevu tipi.",
       });
     }
 
@@ -185,8 +231,15 @@ exports.getAppointments = async (req, res) => {
  */
 exports.updateAppointment = async (req, res) => {
   try {
+    const { role } = req.user;
+    if (role !== "admin" && role !== "consultant" && role !== "superadmin") {
+      return res.status(403).json({
+        success: false,
+        message: "Bu işlemi yapmaya yetkiniz yok.",
+      });
+    }
     const appointmentId = req.params.id;
-    const updateData = req.body;
+    const updateData = { ...req.body };
 
     // Zorunlu alanlarda validasyon yapabilirsiniz
     if (updateData.datetime) {
@@ -287,44 +340,60 @@ exports.updateAppointmentStatuses = async () => {
   try {
     const now = new Date();
 
-    // "Açık" durumda olan, randevu tarihi geçmiş ve silinmemiş randevuları bul
+    // "Açık" durumda olan, randevu tarihi geçmiş ve silinmemiş randevuları tek sorguyla al
     const appointmentsToUpdate = await Appointment.find({
       status: "Açık",
       datetime: { $lt: now },
       isDeleted: false,
     });
 
-    for (let appointment of appointmentsToUpdate) {
-      // İlgili ödeme olup olmadığını kontrol et
-      const payment = await Payment.findOne({
-        appointmentId: appointment._id,
-        isDeleted: false,
-      });
-
-      if (payment && payment.paymentStatus === "Tamamlandı") {
-        appointment.status = "Tamamlandı";
-        appointment.actions = {
-          payNow: false,
-          reBook: true,
-          edit: false,
-          view: true,
-        };
-      } else {
-        appointment.status = "Ödeme Bekleniyor";
-        appointment.actions = {
-          payNow: true,
-          reBook: false,
-          edit: true,
-          view: true,
-        };
-      }
-      appointment.lastEditDate = now;
-      await appointment.save();
+    if (appointmentsToUpdate.length === 0) {
+      console.log("Cron Job: Güncellenecek randevu bulunamadı.");
+      return;
     }
 
-    console.log(
-      `Cron Job: ${appointmentsToUpdate.length} randevu güncellendi.`
-    );
+    // Tüm güncellenmesi gereken randevu ID'lerini al
+    const appointmentIds = appointmentsToUpdate.map((a) => a._id);
+
+    // Bu randevulara bağlı **tüm ödemeleri tek sorguyla** al
+    const payments = await Payment.find({
+      appointmentId: { $in: appointmentIds },
+      isDeleted: false,
+    });
+
+    // Ödemeleri daha hızlı erişebilmek için bir Map oluştur
+    const paymentMap = new Map();
+    payments.forEach((payment) => {
+      paymentMap.set(payment.appointmentId.toString(), payment.paymentStatus);
+    });
+
+    // Güncellenmesi gereken randevular için toplu update işlemi oluştur
+    const bulkUpdates = appointmentsToUpdate.map((appointment) => {
+      const paymentStatus = paymentMap.get(appointment._id.toString());
+      const newStatus =
+        paymentStatus === "Tamamlandı" ? "Tamamlandı" : "Ödeme Bekleniyor";
+      const newActions =
+        newStatus === "Tamamlandı"
+          ? { payNow: false, reBook: true, edit: false, view: true }
+          : { payNow: true, reBook: false, edit: true, view: true };
+
+      return {
+        updateOne: {
+          filter: { _id: appointment._id },
+          update: {
+            status: newStatus,
+            actions: newActions,
+            lastEditDate: now,
+          },
+        },
+      };
+    });
+
+    // **Tek bir updateMany işlemiyle tüm güncellemeleri yap**
+    if (bulkUpdates.length > 0) {
+      await Appointment.bulkWrite(bulkUpdates);
+      console.log(`Cron Job: ${bulkUpdates.length} randevu güncellendi.`);
+    }
   } catch (err) {
     console.error("Cron Job Error:", err);
   }

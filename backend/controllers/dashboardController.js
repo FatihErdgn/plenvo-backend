@@ -1,244 +1,248 @@
-// controllers/dashboardController.js
-
 const Payment = require("../models/Payment");
 const Expense = require("../models/Expense");
-const Appointment = require("../models/Appointment"); // Appointment modelini ekleyin
-// Diğer modelleri de import edebilirsiniz
+const Appointment = require("../models/Appointment");
 
 /**
  * GET /api/dashboard
- * Örnek: GET /api/dashboard?startDate=2025-01-01&endDate=2025-01-31&interval=weekly
- * 
- * Parametreler:
- * - startDate, endDate: Aranacak tarih aralığı (string)
- * - interval: "daily", "weekly", "monthly", "yearly" vb. (tarih formatını belirliyor)
+ * Örnek: GET /api/dashboard?startDate=2025-02-01&endDate=2025-02-09
+ *
+ * Veriler günlük bazda toplanır. "change" değeri, son gün ile ondan önceki gün arasındaki fark yüzdesi olarak hesaplanır.
  */
 exports.getDashboardData = async (req, res) => {
   try {
-    const { startDate, endDate, interval } = req.query;
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      return res
+        .status(400)
+        .json({ status: "error", message: "startDate ve endDate gereklidir." });
+    }
 
-    // 1) start ve end'i Date olarak parse et
+    // 1) Tarihleri parse et
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    // 2) interval'e göre dateFormat seç
-    // daily => YYYY-MM-DD, weekly => YYYY-Wxx, monthly => YYYY-MM, yearly => YYYY
-    let dateFormat = "%Y-%m-%d"; // günlük baz
-    if (interval === "weekly") {
-      dateFormat = "%G-W%V"; // ISO Year-Week
-    } else if (interval === "monthly") {
-      dateFormat = "%Y-%m"; // Yıl-Ay
-    } else if (interval === "yearly") {
-      dateFormat = "%Y"; // Sadece Yıl
-    }
+    // 2) Günlük gruplama için tarih formatı
+    const dateFormat = "%Y-%m-%d";
 
-    // 3) Önceki dönem için tarihleri hesapla
-    let prevStart, prevEnd;
+    // --- SUMMARY ---
+    // Gelir
+    const incomeResult = await Payment.aggregate([
+      {
+        $match: {
+          paymentDate: { $gte: start, $lte: end },
+          paymentStatus: "Tamamlandı",
+          isDeleted: false,
+        },
+      },
+      {
+        $group: { _id: null, totalIncome: { $sum: "$serviceFee" } },
+      },
+    ]);
+    const totalIncome = incomeResult[0]?.totalIncome || 0;
 
-    if (interval === "daily") {
-      prevStart = new Date(start);
-      prevStart.setDate(prevStart.getDate() - 1);
-      prevEnd = new Date(end);
-      prevEnd.setDate(prevEnd.getDate() - 1);
-    } else if (interval === "weekly") {
-      // Haftalık, 7 gün geri
-      prevStart = new Date(start);
-      prevStart.setDate(prevStart.getDate() - 7);
-      prevEnd = new Date(end);
-      prevEnd.setDate(prevEnd.getDate() - 7);
-    } else if (interval === "monthly") {
-      // Aylık, 1 ay geri
-      prevStart = new Date(start);
-      prevStart.setMonth(prevStart.getMonth() - 1);
-      prevEnd = new Date(end);
-      prevEnd.setMonth(prevEnd.getMonth() - 1);
-    } else if (interval === "yearly") {
-      // Yıllık, 1 yıl geri
-      prevStart = new Date(start);
-      prevStart.setFullYear(prevStart.getFullYear() - 1);
-      prevEnd = new Date(end);
-      prevEnd.setFullYear(prevEnd.getFullYear() - 1);
-    } else {
-      // Geçersiz interval
-      return res.status(400).json({ status: "error", message: "Invalid interval" });
-    }
+    // Gider
+    const expenseResult = await Expense.aggregate([
+      {
+        $match: {
+          expenseDate: { $gte: start, $lte: end },
+          isDeleted: false,
+        },
+      },
+      {
+        $group: { _id: null, totalExpense: { $sum: "$expenseAmount" } },
+      },
+    ]);
+    const totalExpense = expenseResult[0]?.totalExpense || 0;
 
-    // 4) Payment Aggregation (Income) - Mevcut dönem
-    const paymentMatch = {
-      paymentDate: { $gte: start, $lte: end },
-      paymentStatus: { $in: ["Completed", "Paid", "Ödendi", "Success"] },
-    };
+    // Kâr
+    const profit = totalIncome - totalExpense;
 
+    // Hasta sayısı
+    const patientResult = await Appointment.aggregate([
+      {
+        $match: {
+          datetime: { $gte: start, $lte: end },
+          isDeleted: false,
+        },
+      },
+      { $count: "totalPatients" },
+    ]);
+    const totalPatientCount = patientResult[0]?.totalPatients || 0;
+
+    // --- TREND (Günlük) ---
+    // Gelir Trend
     const incomeTrendAgg = await Payment.aggregate([
-      { $match: paymentMatch },
+      {
+        $match: {
+          paymentDate: { $gte: start, $lte: end },
+          paymentStatus: "Tamamlandı",
+          isDeleted: false,
+        },
+      },
       {
         $group: {
           _id: {
-            dateGroup: {
+            date: {
               $dateToString: { format: dateFormat, date: "$paymentDate" },
             },
           },
-          totalFee: { $sum: "$serviceFee" }, // $serviceFee kullanıyoruz
-          descArray: { $push: "$paymentDescription" }, // description'ları listeleyelim
+          dailyIncome: { $sum: "$serviceFee" },
         },
       },
-      { $sort: { "_id.dateGroup": 1 } }, // Tarih sırası
+      { $sort: { "_id.date": 1 } },
     ]);
-
-    const incomeLabels = incomeTrendAgg.map((doc) => doc._id.dateGroup);
-    const incomeValues = incomeTrendAgg.map((doc) => doc.totalFee);
-    const incomeDescs = incomeTrendAgg.map((doc) => doc.descArray); 
-    // Örneğin [ ["Ödeme A", "Ödeme B"], ["Ödeme C"], ... ]
-
-    const totalIncome = incomeValues.reduce((acc, val) => acc + val, 0);
-
-    // 5) Expense Aggregation (Expense) - Mevcut dönem
-    const expenseMatch = {
-      expenseDate: { $gte: start, $lte: end },
-    };
-
+    // Gider Trend
     const expenseTrendAgg = await Expense.aggregate([
-      { $match: expenseMatch },
+      {
+        $match: {
+          expenseDate: { $gte: start, $lte: end },
+          isDeleted: false,
+        },
+      },
       {
         $group: {
           _id: {
-            dateGroup: {
+            date: {
               $dateToString: { format: dateFormat, date: "$expenseDate" },
             },
           },
-          totalExpense: { $sum: "$expenseAmount" },
-          descArray: { $push: "$expenseDescription" }, // gider açıklamaları
+          dailyExpense: { $sum: "$expenseAmount" },
         },
       },
-      { $sort: { "_id.dateGroup": 1 } },
+      { $sort: { "_id.date": 1 } },
     ]);
-
-    const expenseLabels = expenseTrendAgg.map((doc) => doc._id.dateGroup);
-    const expenseValues = expenseTrendAgg.map((doc) => doc.totalExpense);
-    const expenseDescs = expenseTrendAgg.map((doc) => doc.descArray);
-    const totalExpense = expenseValues.reduce((acc, val) => acc + val, 0);
-
-    // 6) Önceki dönem gelir ve gider aggregasyonu
-    // 6-A) Önceki dönem Payment Aggregation (Income)
-    const prevPaymentMatch = {
-      paymentDate: { $gte: prevStart, $lte: prevEnd },
-      paymentStatus: { $in: ["Completed", "Paid", "Ödendi", "Success"] },
-    };
-
-    const prevIncomeTrendAgg = await Payment.aggregate([
-      { $match: prevPaymentMatch },
+    // Hasta Trend
+    const patientTrendAgg = await Appointment.aggregate([
+      {
+        $match: {
+          appointmentDate: { $gte: start, $lte: end },
+          isDeleted: false,
+        },
+      },
       {
         $group: {
           _id: {
-            dateGroup: {
-              $dateToString: { format: dateFormat, date: "$paymentDate" },
+            date: {
+              $dateToString: { format: dateFormat, date: "$appointmentDate" },
             },
           },
-          totalFee: { $sum: "$serviceFee" },
+          dailyPatients: { $sum: 1 },
         },
       },
-      { $sort: { "_id.dateGroup": 1 } },
+      { $sort: { "_id.date": 1 } },
     ]);
 
-    const prevTotalIncome = prevIncomeTrendAgg.reduce((acc, doc) => acc + doc.totalFee, 0);
+    // Tüm tarihleri oluştur (start'dan end'e kadar)
+    const dateArray = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      dateArray.push(new Date(d).toISOString().split("T")[0]);
+    }
 
-    // 6-B) Önceki dönem Expense Aggregation (Expense)
-    const prevExpenseMatch = {
-      expenseDate: { $gte: prevStart, $lte: prevEnd },
+    // Aggregation sonuçlarını haritaya dönüştürelim:
+    const incomeMap = {};
+    incomeTrendAgg.forEach(doc => { incomeMap[doc._id.date] = doc.dailyIncome; });
+    const expenseMap = {};
+    expenseTrendAgg.forEach(doc => { expenseMap[doc._id.date] = doc.dailyExpense; });
+    const patientMap = {};
+    patientTrendAgg.forEach(doc => { patientMap[doc._id.date] = doc.dailyPatients; });
+
+    // Trend dizilerini oluştur:
+    const trendIncome = [];
+    const trendExpense = [];
+    const trendProfit = [];
+    const trendPatients = [];
+    dateArray.forEach(date => {
+      const inc = incomeMap[date] || 0;
+      const exp = expenseMap[date] || 0;
+      const pat = patientMap[date] || 0;
+      trendIncome.push(inc);
+      trendExpense.push(exp);
+      trendProfit.push(inc - exp);
+      trendPatients.push(pat);
+    });
+
+    // Change hesaplaması: son gün ile ondan önceki gün arasındaki fark yüzdesi
+    const computeChange = (arr) => {
+      if (arr.length < 2 || arr[arr.length - 2] === 0) return null;
+      const last = arr[arr.length - 1];
+      const prev = arr[arr.length - 2];
+      return ((last - prev) / prev) * 100;
     };
+    const incomeChange = computeChange(trendIncome);
+    const expenseChange = computeChange(trendExpense);
+    const profitChange = computeChange(trendProfit);
+    const patientChange = computeChange(trendPatients);
 
-    const prevExpenseTrendAgg = await Expense.aggregate([
-      { $match: prevExpenseMatch },
+    // --- BREAKDOWN ---
+    // Gelir Breakdown: ödeme yöntemlerine göre
+    const incomeBreakdownAgg = await Payment.aggregate([
+      {
+        $match: {
+          paymentDate: { $gte: start, $lte: end },
+          paymentStatus: "Tamamlandı",
+          isDeleted: false,
+        },
+      },
       {
         $group: {
-          _id: {
-            dateGroup: {
-              $dateToString: { format: dateFormat, date: "$expenseDate" },
-            },
-          },
-          totalExpense: { $sum: "$expenseAmount" },
+          _id: "$paymentMethod",
+          amount: { $sum: "$serviceFee" },
         },
       },
-      { $sort: { "_id.dateGroup": 1 } },
+      { $sort: { amount: -1 } },
     ]);
-
-    const prevTotalExpense = prevExpenseTrendAgg.reduce((acc, doc) => acc + doc.totalExpense, 0);
-
-    // 7) Profitability Aggregation (Mevcut dönem)
-    // Profitability = totalIncome - totalExpense
-    const totalProfitability = totalIncome - totalExpense;
-
-    // 8) Önceki dönemdeki Profitability
-    const prevTotalProfitability = prevTotalIncome - prevTotalExpense;
-
-    // 9) Profitability Change Yüzdesi
-    const profitabilityChange = prevTotalProfitability === 0 ? null : ((totalProfitability - prevTotalProfitability) / prevTotalProfitability) * 100;
-
-    // 10) Patient Count Aggregation (Mevcut dönem)
-    const patientMatch = {
-      appointmentDate: { $gte: start, $lte: end },
-    };
-
-    const patientCountAgg = await Appointment.aggregate([
-      { $match: patientMatch },
-      { $count: "totalCount" },
+    const incomeMethods = incomeBreakdownAgg.map(doc => ({
+      method: doc._id,
+      amount: doc.amount,
+    }));
+    // Gider Breakdown: gider açıklamalarına göre
+    const expenseBreakdownAgg = await Expense.aggregate([
+      {
+        $match: {
+          expenseDate: { $gte: start, $lte: end },
+          isDeleted: false,
+        },
+      },
+      {
+        $group: {
+          _id: "$expenseDescription",
+          amount: { $sum: "$expenseAmount" },
+        },
+      },
+      { $sort: { amount: -1 } },
     ]);
+    const expenseDescriptions = expenseBreakdownAgg.map(doc => ({
+      description: doc._id,
+      amount: doc.amount,
+    }));
 
-    const totalPatientCount = patientCountAgg[0]?.totalCount || 0;
-
-    // 11) Önceki dönemdeki Patient Count Aggregation
-    const prevPatientMatch = {
-      appointmentDate: { $gte: prevStart, $lte: prevEnd },
-    };
-
-    const prevPatientCountAgg = await Appointment.aggregate([
-      { $match: prevPatientMatch },
-      { $count: "totalCount" },
-    ]);
-
-    const prevTotalPatientCount = prevPatientCountAgg[0]?.totalCount || 0;
-
-    // 12) Patient Count Change Yüzdesi
-    const patientCountChange = prevTotalPatientCount === 0 ? null : ((totalPatientCount - prevTotalPatientCount) / prevTotalPatientCount) * 100;
-
-    // 13) Değişim yüzdeleri hesaplama
-    const incomeChange = prevTotalIncome === 0 ? null : ((totalIncome - prevTotalIncome) / prevTotalIncome) * 100;
-    const expenseChange = prevTotalExpense === 0 ? null : ((totalExpense - prevTotalExpense) / prevTotalExpense) * 100;
-
-    // 14) JSON Response
+    // Yanıtı oluştur
     return res.json({
       status: "success",
       updatedAt: new Date().toISOString(),
       data: {
-        [interval]: {
-          startDate: start,
-          endDate: end,
-          totalIncome: {
-            value: totalIncome,      
-            trend: incomeValues,         // toplam rakamlar
-            trendDates: incomeLabels,    // tarih string'leri
-            trendDesc: incomeDescs,      // her tarihteki ödeme description listesi
-            change: incomeChange,        // % değişim
+        summary: {
+          totalIncome,
+          totalExpense,
+          profit,
+          patientCount: totalPatientCount,
+        },
+        trend: {
+          dates: dateArray,
+          income: trendIncome,
+          expense: trendExpense,
+          profit: trendProfit,
+          patientCount: trendPatients,
+          change: {
+            income: incomeChange,
+            expense: expenseChange,
+            profit: profitChange,
+            patientCount: patientChange,
           },
-          totalExpense: {
-            value: totalExpense,
-            trend: expenseValues,
-            trendDates: expenseLabels,
-            trendDesc: expenseDescs,     // her tarihteki gider description listesi
-            change: expenseChange,       // % değişim
-          },
-          profitability: {
-            value: totalProfitability,
-            trend: incomeValues.map((income, idx) => income - (expenseValues[idx] || 0)),
-            trendDates: incomeLabels, // Aynı kategorileri kullanıyoruz
-            change: profitabilityChange, // % değişim
-          },
-          patientCount: {
-            value: totalPatientCount,
-            trend: [], // Eğer trend hesaplanacaksa, farklı aggregasyonlar ekleyebilirsiniz
-            trendDates: incomeLabels, // Aynı kategorileri kullanıyoruz
-            change: patientCountChange, // % değişim
-          },
+        },
+        breakdown: {
+          incomeMethods,
+          expenseDescriptions,
         },
       },
     });

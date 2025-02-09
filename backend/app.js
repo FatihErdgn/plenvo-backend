@@ -94,6 +94,9 @@ app.use("/api/appointments", appointmentRoutes);
 const paymentRoutes = require("./routes/paymentRoutes");
 app.use("/api/payments", paymentRoutes);
 
+const dashboardRoutes = require("./routes/dashboardRoutes");
+app.use("/api/dashboard", dashboardRoutes);
+
 const reminderRoutes = require("./routes/reminderRoutes");
 app.use("/api/reminders", reminderRoutes);
 

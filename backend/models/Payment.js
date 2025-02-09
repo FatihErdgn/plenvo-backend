@@ -45,7 +45,7 @@ const paymentSchema = new mongoose.Schema({
   },
   paymentDescription: {
     type: String,
-    required: true,
+    required: false,
   },
   // Yeni eklenen alanlar
   serviceFee: {

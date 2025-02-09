@@ -5,8 +5,8 @@ const crypto = require("crypto");
 // Randevuya katılanların (participants) alt şeması
 const participantSchema = new mongoose.Schema(
   {
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
+    clientFirstName: { type: String, required: true },
+    clientLastName: { type: String, required: true },
     phoneNumber: { type: String },
     gender: { type: String },
     age: { type: Number },
