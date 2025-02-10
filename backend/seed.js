@@ -34,7 +34,7 @@ async function seedSuperadmin() {
     superAdminCustomer = new Customer({
       customerName: "Vic Spera",
       countryId: null,
-      customerDomain: "localdev",
+      customerDomain: "demo",
       appMainColor: "#000000",
       appSecondaryColor: "#ffffff",
       customerType: "individual",
