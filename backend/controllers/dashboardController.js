@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Payment = require("../models/Payment");
 const Expense = require("../models/Expense");
 const Appointment = require("../models/Appointment");
@@ -17,17 +18,17 @@ exports.getDashboardData = async (req, res) => {
         .json({ status: "error", message: "startDate ve endDate gereklidir." });
     }
 
-    // Auth middleware'den gelen customerId (örn: JWT'den)
-    const customerId = req.user.customerId;
+    // Token'dan gelen customerId (string) ObjectId'ye çevriliyor.
+    const customerId = mongoose.Types.ObjectId(req.user.customerId);
     if (!customerId) {
       return res.status(400).json({ status: "error", message: "customerId bulunamadı." });
     }
 
-    // 1) Tarihleri parse et
+    // Tarihleri parse et
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    // 2) Günlük gruplama için tarih formatı
+    // Günlük gruplama için tarih formatı
     const dateFormat = "%Y-%m-%d";
 
     // --- SUMMARY ---
@@ -38,7 +39,7 @@ exports.getDashboardData = async (req, res) => {
           paymentDate: { $gte: start, $lte: end },
           paymentStatus: "Tamamlandı",
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId, // Müşteri filtresi (ObjectId)
         },
       },
       {
@@ -53,7 +54,7 @@ exports.getDashboardData = async (req, res) => {
         $match: {
           expenseDate: { $gte: start, $lte: end },
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId, // Müşteri filtresi (ObjectId)
         },
       },
       {
@@ -71,7 +72,7 @@ exports.getDashboardData = async (req, res) => {
         $match: {
           datetime: { $gte: start, $lte: end },
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId, // Müşteri filtresi (ObjectId)
         },
       },
       { $count: "totalPatients" },
@@ -86,7 +87,7 @@ exports.getDashboardData = async (req, res) => {
           paymentDate: { $gte: start, $lte: end },
           paymentStatus: "Tamamlandı",
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId,
         },
       },
       {
@@ -108,7 +109,7 @@ exports.getDashboardData = async (req, res) => {
         $match: {
           expenseDate: { $gte: start, $lte: end },
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId,
         },
       },
       {
@@ -130,7 +131,7 @@ exports.getDashboardData = async (req, res) => {
         $match: {
           appointmentDate: { $gte: start, $lte: end },
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId,
         },
       },
       {
@@ -195,7 +196,7 @@ exports.getDashboardData = async (req, res) => {
           paymentDate: { $gte: start, $lte: end },
           paymentStatus: "Tamamlandı",
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId,
         },
       },
       {
@@ -217,7 +218,7 @@ exports.getDashboardData = async (req, res) => {
         $match: {
           expenseDate: { $gte: start, $lte: end },
           isDeleted: false,
-          customerId, // Müşteri filtresi eklendi
+          customerId,
         },
       },
       {
