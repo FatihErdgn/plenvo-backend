@@ -241,7 +241,7 @@ exports.getUsers = async (req, res) => {
     );
     const transformedUsers = users.map((user) => {
       return {
-        ...user,
+        ...filteredUsers,
         roleName: user.roleId?.roleName,
         clinicName: user.clinicId?.clinicName,
       };
