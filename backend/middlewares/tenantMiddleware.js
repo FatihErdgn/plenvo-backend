@@ -16,7 +16,7 @@ const getCustomerFromSubdomain = async (hostname) => {
 
   // Aksi halde, hostname'in ilk kısmı subdomain
   // Ör: "someclinic.myapp.com" => "someclinic"
-  const subdomain = hostname.split(".")[0];
+  const subdomain = hostname.replace(".plenvo.app", ""); // 🔥 SADECE SUBDOMAIN AL
   const customer = await Customer.findOne({
     customerDomain: subdomain,
     isDeleted: false,
