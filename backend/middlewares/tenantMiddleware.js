@@ -30,7 +30,7 @@ const getCustomerFromSubdomain = async (hostname) => {
  */
 exports.resolveCustomer = async (req, res, next) => {
   try {
-    const hostname = hostname.replace(".plenvo.app", ""); // 🔥 SADECE SUBDOMAIN AL
+    const hostname = req.headers.host.split(":")[0];
     console.log(`🌍 Gelen Hostname: ${hostname}`); // ✅ Hostname logla
 
     const customer = await getCustomerFromSubdomain(hostname);
