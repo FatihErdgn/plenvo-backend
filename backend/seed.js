@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
-require("dotenv").config({ path: `.env.${process.env.NODE_ENV || "development"}` });
+require("dotenv").config({
+  path: `.env.${process.env.NODE_ENV || "development"}`,
+});
 
 const Role = require("./models/Role");
 const Customer = require("./models/Customer");
@@ -19,7 +21,9 @@ async function seedSuperadmin() {
   const roleNames = ["superadmin", "consultant", "doctor", "manager", "admin"];
   const existingRoles = await Role.find({ roleName: { $in: roleNames } });
   const existingRoleNames = existingRoles.map((role) => role.roleName);
-  const rolesToCreate = roleNames.filter((role) => !existingRoleNames.includes(role));
+  const rolesToCreate = roleNames.filter(
+    (role) => !existingRoleNames.includes(role)
+  );
 
   if (rolesToCreate.length > 0) {
     await Role.insertMany(rolesToCreate.map((roleName) => ({ roleName })));
@@ -29,7 +33,9 @@ async function seedSuperadmin() {
   }
 
   // 3) Superadmin Müşterisini Kontrol Et
-  let superAdminCustomer = await Customer.findOne({ customerName: "Vic Spera" });
+  let superAdminCustomer = await Customer.findOne({
+    customerName: "Vic Spera",
+  });
   if (!superAdminCustomer) {
     superAdminCustomer = new Customer({
       customerName: "Vic Spera",
@@ -46,13 +52,17 @@ async function seedSuperadmin() {
   }
 
   // 4) SUBDOMAINS ortam değişkeninden müşteri ekleme
-  const subdomains = process.env.SUBDOMAINS ? process.env.SUBDOMAINS.split(",") : [];
+  const subdomains = process.env.SUBDOMAINS
+    ? process.env.SUBDOMAINS.split(",")
+    : [];
 
   for (const subdomain of subdomains) {
     let customer = await Customer.findOne({ customerDomain: subdomain });
     if (!customer) {
       customer = new Customer({
-        customerName: `${subdomain.charAt(0).toUpperCase() + subdomain.slice(1)} Müşteri`,
+        customerName: `${
+          subdomain.charAt(0).toUpperCase() + subdomain.slice(1)
+        } Müşteri`,
         countryId: null,
         customerDomain: subdomain,
         appMainColor: "#123456",
@@ -66,33 +76,45 @@ async function seedSuperadmin() {
     }
   }
 
-  // 5) Superadmin Kullanıcısını Kontrol Et
-  const existingUser = await User.findOne({ username: "vic.spera" });
-  if (existingUser) {
-    console.log("Superadmin kullanıcı zaten mevcut.");
-  } else {
-    const password = process.env.SUPER_ADMIN_PASSWORD;
-    const superadminRole = await Role.findOne({ roleName: "superadmin" });
+  // 5) Her müşteri için bir Superadmin Kullanıcısı Oluştur
+  const customers = await Customer.find({});
 
-    if (!superadminRole) {
-      console.error("Hata: 'superadmin' rolü bulunamadı.");
-      return;
-    }
-
-    const superadminUser = new User({
+  for (const customer of customers) {
+    const existingUser = await User.findOne({
       username: "vic.spera",
-      userMail: "info@vicspera.co.uk",
-      firstName: "Vic",
-      lastName: "Spera",
-      roleId: superadminRole._id,
-      customerId: null,
-      clinicId: null,
-      phoneNumber: null,
-      password: password,
+      customerId: customer._id,
     });
 
-    await superadminUser.save();
-    console.log("Superadmin kullanıcı oluşturuldu.");
+    if (!existingUser) {
+      const password = process.env.SUPER_ADMIN_PASSWORD;
+      const superadminRole = await Role.findOne({ roleName: "superadmin" });
+
+      if (!superadminRole) {
+        console.error("Hata: 'superadmin' rolü bulunamadı.");
+        return;
+      }
+
+      const superadminUser = new User({
+        username: "vic.spera",
+        userMail: "info@vicspera.co.uk",
+        firstName: "Vic",
+        lastName: "Spera",
+        roleId: superadminRole._id,
+        customerId: customer._id, // ✅ Superadmin bu müşteriye bağlanıyor
+        clinicId: null,
+        phoneNumber: null,
+        password: password,
+      });
+
+      await superadminUser.save();
+      console.log(
+        `Superadmin oluşturuldu: vic.spera - Müşteri: ${customer.customerDomain}`
+      );
+    } else {
+      console.log(
+        `Superadmin zaten mevcut: vic.spera - Müşteri: ${customer.customerDomain}`
+      );
+    }
   }
 
   // 6) Para Birimlerini Ekle
