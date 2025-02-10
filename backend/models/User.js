@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 
 const UserSchema = new mongoose.Schema(
   {
-    // Artık sadece roleId tutuyoruz
+    // Sadece roleId tutuyoruz
     roleId: { type: mongoose.Schema.Types.ObjectId, ref: "Role", required: true },
 
     customerId: {
@@ -18,8 +18,8 @@ const UserSchema = new mongoose.Schema(
       required: false, // Eğer superadmin ise clinicId zorunlu değil
     },
 
-    username: { type: String, required: true, unique: true },
-    userMail: { type: String, required: true, unique: true },
+    username: { type: String, required: true },
+    userMail: { type: String, required: true },
     password: { type: String, required: true },
 
     firstName: { type: String, required: true },
@@ -35,8 +35,18 @@ const UserSchema = new mongoose.Schema(
     isDeleted: { type: Boolean, default: false },
   },
   {
-    timestamps: true, // `createdAt` ve `updatedAt` otomatik olarak yönetilecek
+    timestamps: true, // `createdAt` ve `updatedAt` otomatik olarak yönetilir
   }
+);
+
+// Partial index tanımları: isDeleted false olan kayıtlar için benzersizlik kontrolü
+UserSchema.index(
+  { username: 1 },
+  { unique: true, partialFilterExpression: { isDeleted: false } }
+);
+UserSchema.index(
+  { userMail: 1 },
+  { unique: true, partialFilterExpression: { isDeleted: false } }
 );
 
 // Şifre hashleme
