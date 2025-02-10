@@ -16,7 +16,20 @@ const getCustomerFromSubdomain = async (hostname) => {
 
   // Aksi halde, hostname'in ilk kısmı subdomain
   // Ör: "someclinic.myapp.com" => "someclinic"
-  const subdomain = hostname.replace(".plenvo.app", ""); // 🔥 SADECE SUBDOMAIN AL
+  let subdomain = hostname.split(".")[0];
+
+  // Eğer API üzerinden geliyorsa, orijinal subdomain'i 'origin' veya 'referer' başlığından al
+  if (subdomain === "api") {
+    const origin = req.headers.origin || req.headers.referer;
+    if (origin) {
+      const url = new URL(origin);
+      subdomain = url.hostname.split(".")[0];
+      console.log(`🔄 API isteği algılandı, gerçek subdomain: ${subdomain}`);
+    } else {
+      console.log("❌ API isteği var ama origin veya referer yok!");
+    }
+  }
+
   const customer = await Customer.findOne({
     customerDomain: subdomain,
     isDeleted: false,
