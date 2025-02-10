@@ -58,58 +58,65 @@ app.get("/", (req, res) => {
 });
 
 // **ÖNEMLİ**: MongoDB Bağlantısı Tamamlanmadan Express Başlatılmasın!
-connectDB().then(async () => {
-  try {
-    await require("./seed")();
-    console.log("Seed işlemi tamam.");
+connectDB()
+  .then(async () => {
+    try {
+      await require("./seed")();
+      console.log("Seed işlemi tamam.");
 
-    // **Tüm route'ları burada yükle**
-    const authRoutes = require("./routes/authRoutes");
-    app.use("/api/auth", authRoutes);
+      // **Tüm route'ları burada yükle**
+      const authRoutes = require("./routes/authRoutes");
+      app.use("/api/auth", authRoutes);
 
-    const countryRoutes = require("./routes/countryRoutes");
-    app.use("/api/countries", countryRoutes);
+      const countryRoutes = require("./routes/countryRoutes");
+      app.use("/api/countries", countryRoutes);
 
-    const customerRoutes = require("./routes/customerRoutes");
-    app.use("/api/customers", customerRoutes);
+      const customerRoutes = require("./routes/customerRoutes");
+      app.use("/api/customers", customerRoutes);
 
-    const userRoutes = require("./routes/userRoutes");
-    app.use("/api/users", userRoutes);
+      const userRoutes = require("./routes/userRoutes");
+      app.use("/api/users", userRoutes);
 
-    const roleRoutes = require("./routes/roleRoutes");
-    app.use("/api/roles", roleRoutes);
+      const roleRoutes = require("./routes/roleRoutes");
+      app.use("/api/roles", roleRoutes);
 
-    const serviceRoutes = require("./routes/serviceRoutes");
-    app.use("/api/services", serviceRoutes);
+      const serviceRoutes = require("./routes/serviceRoutes");
+      app.use("/api/services", serviceRoutes);
 
-    const appointmentRoutes = require("./routes/appointmentRoutes");
-    app.use("/api/appointments", appointmentRoutes);
+      const appointmentRoutes = require("./routes/appointmentRoutes");
+      app.use("/api/appointments", appointmentRoutes);
 
-    const paymentRoutes = require("./routes/paymentRoutes");
-    app.use("/api/payments", paymentRoutes);
+      const paymentRoutes = require("./routes/paymentRoutes");
+      app.use("/api/payments", paymentRoutes);
 
-    const dashboardRoutes = require("./routes/dashboardRoutes");
-    app.use("/api/dashboard", dashboardRoutes);
+      const dashboardRoutes = require("./routes/dashboardRoutes");
+      app.use("/api/dashboard", dashboardRoutes);
 
-    const reminderRoutes = require("./routes/reminderRoutes");
-    app.use("/api/reminders", reminderRoutes);
+      const reminderRoutes = require("./routes/reminderRoutes");
+      app.use("/api/reminders", reminderRoutes);
 
-    const expenseRoutes = require("./routes/expenseRoutes");
-    app.use("/api/expenses", expenseRoutes);
+      const expenseRoutes = require("./routes/expenseRoutes");
+      app.use("/api/expenses", expenseRoutes);
 
-    const currencyRoutes = require("./routes/currencyRoutes");
-    app.use("/api/currencies", currencyRoutes);
+      const currencyRoutes = require("./routes/currencyRoutes");
+      app.use("/api/currencies", currencyRoutes);
 
-    // Tüm rotalardan sonra error handler
-    app.use(errorHandler);
+      // Tüm rotalardan sonra error handler
+      app.use(errorHandler);
 
-    // **Server MongoDB bağlantısı tamamlandıktan sonra başlatılmalı**
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+      app._router.stack.forEach((r) => {
+        if (r.route && r.route.path) {
+          console.log(`✅ Route: ${r.route.path}`);
+        }
+      });
 
-  } catch (err) {
-    console.error("Seed işlemi sırasında hata:", err);
-  }
-}).catch((err) => {
-  console.error("MongoDB bağlantı hatası:", err);
-});
+      // **Server MongoDB bağlantısı tamamlandıktan sonra başlatılmalı**
+      const PORT = process.env.PORT || 5000;
+      app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+    } catch (err) {
+      console.error("Seed işlemi sırasında hata:", err);
+    }
+  })
+  .catch((err) => {
+    console.error("MongoDB bağlantı hatası:", err);
+  });
