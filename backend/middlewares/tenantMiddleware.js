@@ -1,6 +1,5 @@
 // middlewares/tenant.js
 const Customer = require("../models/Customer");
-const User = require("../models/User");
 
 /**
  * Development ortamında "localhost" için 'localdev' adlı bir customerDomain kullanıyoruz.
@@ -29,42 +28,32 @@ const getCustomerFromSubdomain = async (hostname) => {
  * Subdomain üzerinden Customer'ı bulup request'e ekler.
  * Eğer bulamazsak 404 dönüyoruz.
  */
-
 exports.resolveCustomer = async (req, res, next) => {
   try {
-    // Eğer login isteği ise, request body'den username'i al
-    const isLoginRoute = req.path === "/api/auth/login";
-    let customerId = null;
+    const hostname = hostname.replace(".plenvo.app", ""); // 🔥 SADECE SUBDOMAIN AL
+    console.log(`🌍 Gelen Hostname: ${hostname}`); // ✅ Hostname logla
 
-    if (isLoginRoute && req.body.username) {
-      console.log(`🔄 Login isteği alındı, username: ${req.body.username}`);
-
-      // Kullanıcıyı username'den çekip customerId'yi bul
-      const user = await User.findOne({ username: req.body.username });
-
-      if (user && user.customerId) {
-        customerId = user.customerId;
-        console.log(`✅ Kullanıcının müşteri ID'si bulundu: ${customerId}`);
-      } else {
-        console.log(`❌ Kullanıcı bulunamadı veya customerId atanmadı: ${req.body.username}`);
-        return res.status(404).json({ success: false, message: "Müşteri bulunamadı veya aktif değil." });
-      }
-    }
-
-    // Eğer müşteri ID bulunduysa, ona ait müşteri kaydını çek
-    const customer = customerId ? await Customer.findById(customerId) : null;
+    const customer = await getCustomerFromSubdomain(hostname);
 
     if (!customer) {
-      console.log("❌ Müşteri bulunamadı veya aktif değil.");
-      return res.status(404).json({ success: false, message: "Müşteri bulunamadı veya aktif değil." });
+      console.log(`❌ Müşteri bulunamadı: ${hostname}`); // ✅ Müşteri bulunamazsa logla
+      return res.status(404).json({
+        success: false,
+        message: `Müşteri bulunamadı veya aktif değil: ${hostname}`,
+      });
     }
 
-    console.log(`✅ Bulunan Müşteri: ${customer.customerDomain}, ID: ${customer._id}`);
+    console.log(
+      `✅ Bulunan Müşteri: ${customer.customerDomain}, ID: ${customer._id}`
+    ); // ✅ Müşteri bulundu logla
     req.customer = customer;
     next();
   } catch (err) {
     console.error("❌ resolveCustomer error:", err);
-    return res.status(500).json({ success: false, message: "Müşteri çözümlenemedi." });
+    res.status(500).json({
+      success: false,
+      message: "Tenant (müşteri) çözümlenemedi.",
+    });
   }
 };
 
