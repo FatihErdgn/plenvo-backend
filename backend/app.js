@@ -64,18 +64,31 @@ connectDB().then(async () => {
     console.log("Seed işlemi tamam.");
 
     // **TÜM ROUTE'LARI BURADA YÜKLE**
-    app.use("/api/auth", require("./routes/authRoutes"));
-    app.use("/api/countries", require("./routes/countryRoutes"));
-    app.use("/api/customers", require("./routes/customerRoutes"));
-    app.use("/api/users", require("./routes/userRoutes"));
-    app.use("/api/roles", require("./routes/roleRoutes"));
-    app.use("/api/services", require("./routes/serviceRoutes"));
-    app.use("/api/appointments", require("./routes/appointmentRoutes"));
-    app.use("/api/payments", require("./routes/paymentRoutes"));
-    app.use("/api/dashboard", require("./routes/dashboardRoutes"));
-    app.use("/api/reminders", require("./routes/reminderRoutes"));
-    app.use("/api/expenses", require("./routes/expenseRoutes"));
-    app.use("/api/currencies", require("./routes/currencyRoutes"));
+    const authRoutes = require("./routes/authRoutes");
+    const countryRoutes = require("./routes/countryRoutes");
+    const customerRoutes = require("./routes/customerRoutes");
+    const userRoutes = require("./routes/userRoutes");
+    const roleRoutes = require("./routes/roleRoutes");
+    const serviceRoutes = require("./routes/serviceRoutes");
+    const appointmentRoutes = require("./routes/appointmentRoutes");
+    const paymentRoutes = require("./routes/paymentRoutes");
+    const dashboardRoutes = require("./routes/dashboardRoutes");
+    const reminderRoutes = require("./routes/reminderRoutes");
+    const expenseRoutes = require("./routes/expenseRoutes");
+    const currencyRoutes = require("./routes/currencyRoutes");
+
+    app.use("/api/auth", authRoutes);
+    app.use("/api/countries", countryRoutes);
+    app.use("/api/customers", customerRoutes);
+    app.use("/api/users", userRoutes);
+    app.use("/api/roles", roleRoutes);
+    app.use("/api/services", serviceRoutes);
+    app.use("/api/appointments", appointmentRoutes);
+    app.use("/api/payments", paymentRoutes);
+    app.use("/api/dashboard", dashboardRoutes);
+    app.use("/api/reminders", reminderRoutes);
+    app.use("/api/expenses", expenseRoutes);
+    app.use("/api/currencies", currencyRoutes);
 
     // **Tüm route’ları konsola yazdıralım**
     console.log("✅ Yüklenen Route’lar:");
