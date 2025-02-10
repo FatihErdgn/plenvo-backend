@@ -1,7 +1,7 @@
 // middlewares/tenant.js
 const Customer = require("../models/Customer");
-const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+
 /**
  * Development ortamında "localhost" için 'localdev' adlı bir customerDomain kullanıyoruz.
  * Subdomain mantığını da hostname.split('.')[0] ile alıyoruz.
@@ -32,51 +32,39 @@ const getCustomerFromSubdomain = async (hostname) => {
 
 exports.resolveCustomer = async (req, res, next) => {
   try {
-    // Eğer authorization header varsa, token içinden customerId al
-    const token = req.headers.authorization?.split(" ")[1];
+    // Eğer login isteği ise, request body'den username'i al
+    const isLoginRoute = req.path === "/api/auth/login";
+    let customerId = null;
 
-    if (!token) {
-      console.log("❌ Token bulunamadı, müşteri çözümlenemedi.");
-      return res
-        .status(401)
-        .json({ success: false, message: "Yetkisiz giriş." });
+    if (isLoginRoute && req.body.username) {
+      console.log(`🔄 Login isteği alındı, username: ${req.body.username}`);
+
+      // Kullanıcıyı username'den çekip customerId'yi bul
+      const user = await User.findOne({ username: req.body.username });
+
+      if (user && user.customerId) {
+        customerId = user.customerId;
+        console.log(`✅ Kullanıcının müşteri ID'si bulundu: ${customerId}`);
+      } else {
+        console.log(`❌ Kullanıcı bulunamadı veya customerId atanmadı: ${req.body.username}`);
+        return res.status(404).json({ success: false, message: "Müşteri bulunamadı veya aktif değil." });
+      }
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-
-    if (!user || !user.customerId) {
-      console.log(`❌ Kullanıcı veya customerId bulunamadı: ${decoded.id}`);
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Müşteri bulunamadı veya aktif değil.",
-        });
-    }
-
-    const customer = await Customer.findById(user.customerId);
+    // Eğer müşteri ID bulunduysa, ona ait müşteri kaydını çek
+    const customer = customerId ? await Customer.findById(customerId) : null;
 
     if (!customer) {
-      console.log(`❌ Müşteri kaydı bulunamadı: ${user.customerId}`);
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Müşteri bulunamadı veya aktif değil.",
-        });
+      console.log("❌ Müşteri bulunamadı veya aktif değil.");
+      return res.status(404).json({ success: false, message: "Müşteri bulunamadı veya aktif değil." });
     }
 
-    console.log(
-      `✅ Bulunan Müşteri: ${customer.customerDomain}, ID: ${customer._id}`
-    );
+    console.log(`✅ Bulunan Müşteri: ${customer.customerDomain}, ID: ${customer._id}`);
     req.customer = customer;
     next();
   } catch (err) {
     console.error("❌ resolveCustomer error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Müşteri çözümlenemedi." });
+    return res.status(500).json({ success: false, message: "Müşteri çözümlenemedi." });
   }
 };
 
