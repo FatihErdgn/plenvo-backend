@@ -18,8 +18,8 @@ exports.getDashboardData = async (req, res) => {
         .json({ status: "error", message: "startDate ve endDate gereklidir." });
     }
 
-    // Token'dan gelen customerId (string) ObjectId'ye çevriliyor.
-    const customerId = mongoose.Types.ObjectId(req.user.customerId);
+    // Token'dan gelen customerId (string) -> ObjectId'ye çevirmek için new ile kullanıyoruz.
+    const customerId = new mongoose.Types.ObjectId(req.user.customerId);
     if (!customerId) {
       return res.status(400).json({ status: "error", message: "customerId bulunamadı." });
     }
