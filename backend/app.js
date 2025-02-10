@@ -1,7 +1,6 @@
 require("dotenv").config({
   path: `.env.${process.env.NODE_ENV || "development"}`,
 });
-
 const express = require("express");
 const connectDB = require("./config/database");
 const cors = require("cors");
@@ -10,18 +9,27 @@ const cookieParser = require("cookie-parser");
 const errorHandler = require("./middlewares/errorHandler");
 const apiLimiter = require("./middlewares/rateLimiter");
 const morgan = require("morgan");
-
 require("./jobs/reminderJob");
 require("./jobs/updateAppointmentStatus");
+const seedSuperadmin = require("./seed");
 
-// Express App Başlat
+// Uygulamayı başlat
 const app = express();
 
-// CORS Ayarları
+// MongoDB Bağlantısı
+connectDB().then(async () => {
+  try {
+    await seedSuperadmin();
+    console.log("Seed işlemi tamam.");
+  } catch (err) {
+    console.error("Seed işlemi sırasında hata:", err);
+  }
+});
+
 const allowedOrigins = [
-  "http://localhost:3000",
-  /\.plenvo\.app$/, // *.plenvo.app için izin
-  "https://api.plenvo.app",
+  "http://localhost:3000", // Geliştirme ortamı (React frontend)
+  /\.plenvo\.com$/, // *.yourdomain.com şeklindeki tüm subdomainler için izin
+  "https://api.plenvo.com",
 ];
 
 const corsOptions = {
@@ -35,79 +43,71 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.warn(`CORS Engellendi: ${origin}`);
-      callback(new Error("CORS hatası!"));
+      callback(null, false); // JSON hata döndürmek için bu satır daha iyi
     }
   },
-  credentials: true,
+  credentials: true, // Cookie paylaşımı için
   optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
+
 app.use(cookieParser());
+
 app.use(bodyParser.json());
 app.use("/api/", apiLimiter);
 
-// Geliştirme Ortamı İçin Loglama
 if (process.env.NODE_ENV !== "production") {
-  app.use(morgan("dev"));
+  app.use(morgan("dev")); // Geliştirme sırasında detaylı loglar
 }
 
-// Basit Test Route
+// Basit bir test route
 app.get("/", (req, res) => {
-  res.send("✅ Hospital Appointment System API is running...");
+  res.send("Hospital Appointment System API is running...");
 });
 
-// **ÖNEMLİ: MongoDB Bağlantısı Tamamlanmadan Express Route’lar Yüklenmesin!**
-connectDB().then(async () => {
-  try {
-    await require("./seed")();
-    console.log("Seed işlemi tamam.");
+// Server'ı başlat
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-    // **TÜM ROUTE'LARI BURADA YÜKLE**
-    const authRoutes = require("./routes/authRoutes");
-    const countryRoutes = require("./routes/countryRoutes");
-    const customerRoutes = require("./routes/customerRoutes");
-    const userRoutes = require("./routes/userRoutes");
-    const roleRoutes = require("./routes/roleRoutes");
-    const serviceRoutes = require("./routes/serviceRoutes");
-    const appointmentRoutes = require("./routes/appointmentRoutes");
-    const paymentRoutes = require("./routes/paymentRoutes");
-    const dashboardRoutes = require("./routes/dashboardRoutes");
-    const reminderRoutes = require("./routes/reminderRoutes");
-    const expenseRoutes = require("./routes/expenseRoutes");
-    const currencyRoutes = require("./routes/currencyRoutes");
+const authRoutes = require("./routes/authRoutes");
+app.use("/api/auth", authRoutes);
 
-    app.use("/api/auth", authRoutes);
-    app.use("/api/countries", countryRoutes);
-    app.use("/api/customers", customerRoutes);
-    app.use("/api/users", userRoutes);
-    app.use("/api/roles", roleRoutes);
-    app.use("/api/services", serviceRoutes);
-    app.use("/api/appointments", appointmentRoutes);
-    app.use("/api/payments", paymentRoutes);
-    app.use("/api/dashboard", dashboardRoutes);
-    app.use("/api/reminders", reminderRoutes);
-    app.use("/api/expenses", expenseRoutes);
-    app.use("/api/currencies", currencyRoutes);
+const countryRoutes = require("./routes/countryRoutes");
+app.use("/api/countries", countryRoutes);
 
-    // **Tüm route’ları konsola yazdıralım**
-    console.log("✅ Yüklenen Route’lar:");
-    app._router.stack.forEach((r) => {
-      if (r.route && r.route.path) {
-        console.log(`🔹 Route: ${r.route.path}`);
-      }
-    });
+const customerRoutes = require("./routes/customerRoutes");
+app.use("/api/customers", customerRoutes);
 
-    // Hata Yakalama Middleware
-    app.use(errorHandler);
+const userRoutes = require("./routes/userRoutes");
+app.use("/api/users", userRoutes);
 
-    // **Server MongoDB bağlantısı tamamlandıktan sonra başlatılmalı**
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+const roleRoutes = require("./routes/roleRoutes");
+app.use("/api/roles", roleRoutes);
 
-  } catch (err) {
-    console.error("❌ Seed işlemi sırasında hata:", err);
-  }
-}).catch((err) => {
-  console.error("❌ MongoDB bağlantı hatası:", err);
-});
+const serviceRoutes = require("./routes/serviceRoutes");
+app.use("/api/services", serviceRoutes);
+
+const appointmentRoutes = require("./routes/appointmentRoutes");
+app.use("/api/appointments", appointmentRoutes);
+
+const paymentRoutes = require("./routes/paymentRoutes");
+app.use("/api/payments", paymentRoutes);
+
+const dashboardRoutes = require("./routes/dashboardRoutes");
+app.use("/api/dashboard", dashboardRoutes);
+
+const reminderRoutes = require("./routes/reminderRoutes");
+app.use("/api/reminders", reminderRoutes);
+
+// const appointmentRoutes = require("./routes/appointmentRoutes");
+// app.use("/api/appointments", appointmentRoutes);
+
+const expenseRoutes = require("./routes/expenseRoutes");
+app.use("/api/expenses", expenseRoutes);
+
+const currencyRoutes = require("./routes/currencyRoutes");
+app.use("/api/currencies", currencyRoutes);
+
+// Tüm rotalardan sonra error handler
+app.use(errorHandler);
