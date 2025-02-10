@@ -235,6 +235,10 @@ exports.getUsers = async (req, res) => {
       })
       .sort({ createdAt: -1 })
       .lean();
+    // Superadmin kullanıcılarını filtrele
+    const filteredUsers = users.filter(
+      (user) => user.roleId?.roleName !== "superadmin"
+    );
     const transformedUsers = users.map((user) => {
       return {
         ...user,
