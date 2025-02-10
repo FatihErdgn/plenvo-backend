@@ -60,7 +60,7 @@ exports.login = async (req, res) => {
       clinicId: user.clinicId,
       // Süperadmin ise customerId null (sınırsız erişim)
       // Değilse kendi customerId'si
-      customerId: isSuperadmin ? null : user.customerId,
+      customerId: user.customerId,
     };
 
     // 4) JWT oluştur
