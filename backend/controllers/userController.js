@@ -239,7 +239,7 @@ exports.getUsers = async (req, res) => {
     const filteredUsers = users.filter(
       (user) => user.roleId?.roleName !== "superadmin"
     );
-    const transformedUsers = users.map((user) => {
+    const transformedUsers = filteredUsers.map((user) => {
       return {
         ...filteredUsers,
         roleName: user.roleId?.roleName,
