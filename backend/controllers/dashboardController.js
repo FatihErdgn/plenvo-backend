@@ -17,6 +17,14 @@ exports.getDashboardData = async (req, res) => {
         .json({ status: "error", message: "startDate ve endDate gereklidir." });
     }
 
+    // Kullanıcının CustomerID'sini al (JWT'den gelen customerId)
+    const customerId = req.user.customerId;
+    if (!customerId) {
+      return res
+        .status(403)
+        .json({ status: "error", message: "Erişim yetkiniz yok." });
+    }
+
     // 1) Tarihleri parse et
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -29,6 +37,7 @@ exports.getDashboardData = async (req, res) => {
     const incomeResult = await Payment.aggregate([
       {
         $match: {
+          customerId,
           paymentDate: { $gte: start, $lte: end },
           paymentStatus: "Tamamlandı",
           isDeleted: false,
@@ -44,6 +53,7 @@ exports.getDashboardData = async (req, res) => {
     const expenseResult = await Expense.aggregate([
       {
         $match: {
+          customerId,
           expenseDate: { $gte: start, $lte: end },
           isDeleted: false,
         },
@@ -61,6 +71,7 @@ exports.getDashboardData = async (req, res) => {
     const patientResult = await Appointment.aggregate([
       {
         $match: {
+          customerId,
           datetime: { $gte: start, $lte: end },
           isDeleted: false,
         },
@@ -74,6 +85,7 @@ exports.getDashboardData = async (req, res) => {
     const incomeTrendAgg = await Payment.aggregate([
       {
         $match: {
+          customerId,
           paymentDate: { $gte: start, $lte: end },
           paymentStatus: "Tamamlandı",
           isDeleted: false,
@@ -95,6 +107,7 @@ exports.getDashboardData = async (req, res) => {
     const expenseTrendAgg = await Expense.aggregate([
       {
         $match: {
+          customerId,
           expenseDate: { $gte: start, $lte: end },
           isDeleted: false,
         },
@@ -115,6 +128,7 @@ exports.getDashboardData = async (req, res) => {
     const patientTrendAgg = await Appointment.aggregate([
       {
         $match: {
+          customerId,
           appointmentDate: { $gte: start, $lte: end },
           isDeleted: false,
         },
@@ -140,18 +154,24 @@ exports.getDashboardData = async (req, res) => {
 
     // Aggregation sonuçlarını haritaya dönüştürelim:
     const incomeMap = {};
-    incomeTrendAgg.forEach(doc => { incomeMap[doc._id.date] = doc.dailyIncome; });
+    incomeTrendAgg.forEach((doc) => {
+      incomeMap[doc._id.date] = doc.dailyIncome;
+    });
     const expenseMap = {};
-    expenseTrendAgg.forEach(doc => { expenseMap[doc._id.date] = doc.dailyExpense; });
+    expenseTrendAgg.forEach((doc) => {
+      expenseMap[doc._id.date] = doc.dailyExpense;
+    });
     const patientMap = {};
-    patientTrendAgg.forEach(doc => { patientMap[doc._id.date] = doc.dailyPatients; });
+    patientTrendAgg.forEach((doc) => {
+      patientMap[doc._id.date] = doc.dailyPatients;
+    });
 
     // Trend dizilerini oluştur:
     const trendIncome = [];
     const trendExpense = [];
     const trendProfit = [];
     const trendPatients = [];
-    dateArray.forEach(date => {
+    dateArray.forEach((date) => {
       const inc = incomeMap[date] || 0;
       const exp = expenseMap[date] || 0;
       const pat = patientMap[date] || 0;
@@ -178,6 +198,7 @@ exports.getDashboardData = async (req, res) => {
     const incomeBreakdownAgg = await Payment.aggregate([
       {
         $match: {
+          customerId,
           paymentDate: { $gte: start, $lte: end },
           paymentStatus: "Tamamlandı",
           isDeleted: false,
@@ -191,7 +212,7 @@ exports.getDashboardData = async (req, res) => {
       },
       { $sort: { amount: -1 } },
     ]);
-    const incomeMethods = incomeBreakdownAgg.map(doc => ({
+    const incomeMethods = incomeBreakdownAgg.map((doc) => ({
       method: doc._id,
       amount: doc.amount,
     }));
@@ -199,6 +220,7 @@ exports.getDashboardData = async (req, res) => {
     const expenseBreakdownAgg = await Expense.aggregate([
       {
         $match: {
+          customerId,
           expenseDate: { $gte: start, $lte: end },
           isDeleted: false,
         },
@@ -211,7 +233,7 @@ exports.getDashboardData = async (req, res) => {
       },
       { $sort: { amount: -1 } },
     ]);
-    const expenseDescriptions = expenseBreakdownAgg.map(doc => ({
+    const expenseDescriptions = expenseBreakdownAgg.map((doc) => ({
       description: doc._id,
       amount: doc.amount,
     }));
