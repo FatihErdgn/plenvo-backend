@@ -215,6 +215,7 @@ exports.deleteUser = async (req, res) => {
 };
 
 // Kullanıcıları listeleme
+// Kullanıcıları listeleme
 exports.getUsers = async (req, res) => {
   try {
     const customerId = req.user.customerId; // JWT'den gelen customerId
@@ -235,17 +236,19 @@ exports.getUsers = async (req, res) => {
       })
       .sort({ createdAt: -1 })
       .lean();
+
     // Superadmin kullanıcılarını filtrele
     const filteredUsers = users.filter(
       (user) => user.roleId?.roleName !== "superadmin"
     );
-    const transformedUsers = filteredUsers.map((user) => {
-      return {
-        ...filteredUsers,
-        roleName: user.roleId?.roleName,
-        clinicName: user.clinicId?.clinicName,
-      };
-    });
+
+    // Kullanıcıları dönüştür (roleName ve clinicName ekleyerek)
+    const transformedUsers = filteredUsers.map((user) => ({
+      ...user, // ❌ Yanlış: filteredUsers yerine user kullanmalıyız
+      roleName: user.roleId?.roleName,
+      clinicName: user.clinicId?.clinicName,
+    }));
+
     res.status(200).json({ success: true, data: transformedUsers });
   } catch (err) {
     console.error(err);
