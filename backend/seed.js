@@ -1,6 +1,6 @@
-// scripts/seedSuperadmin.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+require("dotenv").config({ path: `.env.${process.env.NODE_ENV || "development"}` });
 
 const Role = require("./models/Role");
 const Customer = require("./models/Customer");
@@ -19,9 +19,7 @@ async function seedSuperadmin() {
   const roleNames = ["superadmin", "consultant", "doctor", "manager", "admin"];
   const existingRoles = await Role.find({ roleName: { $in: roleNames } });
   const existingRoleNames = existingRoles.map((role) => role.roleName);
-  const rolesToCreate = roleNames.filter(
-    (role) => !existingRoleNames.includes(role)
-  );
+  const rolesToCreate = roleNames.filter((role) => !existingRoleNames.includes(role));
 
   if (rolesToCreate.length > 0) {
     await Role.insertMany(rolesToCreate.map((roleName) => ({ roleName })));
@@ -30,9 +28,8 @@ async function seedSuperadmin() {
     console.log("Tüm roller zaten mevcut.");
   }
 
-  let superAdminCustomer = await Customer.findOne({
-    customerName: "Vic Spera",
-  });
+  // 3) Superadmin Müşterisini Kontrol Et
+  let superAdminCustomer = await Customer.findOne({ customerName: "Vic Spera" });
   if (!superAdminCustomer) {
     superAdminCustomer = new Customer({
       customerName: "Vic Spera",
@@ -48,16 +45,40 @@ async function seedSuperadmin() {
     console.log("Superadmin müşterisi zaten mevcut.");
   }
 
-  // 3) Kullanıcı var mı?
+  // 4) SUBDOMAINS ortam değişkeninden müşteri ekleme
+  const subdomains = process.env.SUBDOMAINS ? process.env.SUBDOMAINS.split(",") : [];
+
+  for (const subdomain of subdomains) {
+    let customer = await Customer.findOne({ customerDomain: subdomain });
+    if (!customer) {
+      customer = new Customer({
+        customerName: `${subdomain.charAt(0).toUpperCase() + subdomain.slice(1)} Müşteri`,
+        countryId: null,
+        customerDomain: subdomain,
+        appMainColor: "#123456",
+        appSecondaryColor: "#abcdef",
+        customerType: "business",
+      });
+      await customer.save();
+      console.log(`Yeni müşteri oluşturuldu: ${subdomain}`);
+    } else {
+      console.log(`Müşteri zaten mevcut: ${subdomain}`);
+    }
+  }
+
+  // 5) Superadmin Kullanıcısını Kontrol Et
   const existingUser = await User.findOne({ username: "vic.spera" });
   if (existingUser) {
     console.log("Superadmin kullanıcı zaten mevcut.");
   } else {
-    // Şifre
     const password = process.env.SUPER_ADMIN_PASSWORD;
-    // const hashedPassword = await bcrypt.hash(password, 10);
+    const superadminRole = await Role.findOne({ roleName: "superadmin" });
 
-    // Yeni User
+    if (!superadminRole) {
+      console.error("Hata: 'superadmin' rolü bulunamadı.");
+      return;
+    }
+
     const superadminUser = new User({
       username: "vic.spera",
       userMail: "info@vicspera.co.uk",
@@ -74,31 +95,20 @@ async function seedSuperadmin() {
     console.log("Superadmin kullanıcı oluşturuldu.");
   }
 
-  // yeni currency
-  const currencyTRY = new Currency({
-    currencyName: "TRY",
-  });
-
-  // yeni currency
-  const currencyEUR = new Currency({
-    currencyName: "EUR",
-  });
-
-  // yeni currency
-  const currencyUSD = new Currency({
-    currencyName: "USD",
-  });
-
-  await currencyTRY.save();
-  await currencyEUR.save();
-  await currencyUSD.save();
-  console.log("para birimleri oluşturuldu.");
+  // 6) Para Birimlerini Ekle
+  const currencies = ["TRY", "EUR", "USD"];
+  for (const currencyName of currencies) {
+    const existingCurrency = await Currency.findOne({ currencyName });
+    if (!existingCurrency) {
+      await new Currency({ currencyName }).save();
+      console.log(`Yeni para birimi eklendi: ${currencyName}`);
+    }
+  }
 }
 
-// Bu dosya tek başına çalıştırılınca devreye girsin:
+// Dosya doğrudan çalıştırıldığında
 if (require.main === module) {
   seedSuperadmin();
 }
 
-// Eğer başka yerden import etmek isterseniz:
 module.exports = seedSuperadmin;
