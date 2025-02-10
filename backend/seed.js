@@ -77,45 +77,46 @@ async function seedSuperadmin() {
   }
 
   // 5) Her müşteri için bir Superadmin Kullanıcısı Oluştur
-  const customers = await Customer.find({});
+// 5) Her müşteri için bir Superadmin Kullanıcısı Oluştur
+const customers = await Customer.find({});
 
-  for (const customer of customers) {
-    const existingUser = await User.findOne({
-      username: "vic.spera",
-      customerId: customer._id,
+for (const customer of customers) {
+  const uniqueUsername = `vic.spera_${customer.customerDomain}`;
+
+  const existingUser = await User.findOne({ username: uniqueUsername });
+
+  if (!existingUser) {
+    const password = process.env.SUPER_ADMIN_PASSWORD;
+    const superadminRole = await Role.findOne({ roleName: "superadmin" });
+
+    if (!superadminRole) {
+      console.error("Hata: 'superadmin' rolü bulunamadı.");
+      return;
+    }
+
+    const superadminUser = new User({
+      username: uniqueUsername, // ✅ Kullanıcı adı artık müşteri domain'i içeriyor
+      userMail: `admin@${customer.customerDomain}.com`, // 📌 Unique olması için e-mail de güncellendi
+      firstName: "Vic",
+      lastName: "Spera",
+      roleId: superadminRole._id,
+      customerId: customer._id, // ✅ Superadmin bu müşteriye bağlanıyor
+      clinicId: null,
+      phoneNumber: null,
+      password: password,
     });
 
-    if (!existingUser) {
-      const password = process.env.SUPER_ADMIN_PASSWORD;
-      const superadminRole = await Role.findOne({ roleName: "superadmin" });
-
-      if (!superadminRole) {
-        console.error("Hata: 'superadmin' rolü bulunamadı.");
-        return;
-      }
-
-      const superadminUser = new User({
-        username: "vic.spera",
-        userMail: "info@vicspera.co.uk",
-        firstName: "Vic",
-        lastName: "Spera",
-        roleId: superadminRole._id,
-        customerId: customer._id, // ✅ Superadmin bu müşteriye bağlanıyor
-        clinicId: null,
-        phoneNumber: null,
-        password: password,
-      });
-
-      await superadminUser.save();
-      console.log(
-        `Superadmin oluşturuldu: vic.spera - Müşteri: ${customer.customerDomain}`
-      );
-    } else {
-      console.log(
-        `Superadmin zaten mevcut: vic.spera - Müşteri: ${customer.customerDomain}`
-      );
-    }
+    await superadminUser.save();
+    console.log(
+      `Superadmin oluşturuldu: ${uniqueUsername} - Müşteri: ${customer.customerDomain}`
+    );
+  } else {
+    console.log(
+      `Superadmin zaten mevcut: ${uniqueUsername} - Müşteri: ${customer.customerDomain}`
+    );
   }
+}
+
 
   // 6) Para Birimlerini Ekle
   const currencies = ["TRY", "EUR", "USD"];
