@@ -8,7 +8,9 @@ const Customer = require("../models/Customer");
 const getCustomerFromSubdomain = async (hostname) => {
   // Localhost veya 127.0.0.1 ise dev ortamı
   if (hostname === "localhost" || hostname === "127.0.0.1") {
-    const localCustomer = await Customer.findOne({ customerDomain: "localdev" });
+    const localCustomer = await Customer.findOne({
+      customerDomain: "localdev",
+    });
     return localCustomer || null;
   }
 
@@ -28,21 +30,26 @@ const getCustomerFromSubdomain = async (hostname) => {
  */
 exports.resolveCustomer = async (req, res, next) => {
   try {
-    // Port varsa ayıklayalım (örn: localhost:3000)
     const hostname = req.headers.host.split(":")[0];
+    console.log(`🌍 Gelen Hostname: ${hostname}`); // ✅ Hostname logla
+
     const customer = await getCustomerFromSubdomain(hostname);
 
     if (!customer) {
+      console.log(`❌ Müşteri bulunamadı: ${hostname}`); // ✅ Müşteri bulunamazsa logla
       return res.status(404).json({
         success: false,
-        message: "Müşteri bulunamadı veya aktif değil.",
+        message: `Müşteri bulunamadı veya aktif değil: ${hostname}`,
       });
     }
 
-    req.customer = customer; // Bu customer'ı diğer yerlerde kullanabiliriz
+    console.log(
+      `✅ Bulunan Müşteri: ${customer.customerDomain}, ID: ${customer._id}`
+    ); // ✅ Müşteri bulundu logla
+    req.customer = customer;
     next();
   } catch (err) {
-    console.error("resolveCustomer error:", err);
+    console.error("❌ resolveCustomer error:", err);
     res.status(500).json({
       success: false,
       message: "Tenant (müşteri) çözümlenemedi.",
