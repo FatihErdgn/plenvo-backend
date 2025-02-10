@@ -29,7 +29,7 @@ connectDB().then(async () => {
 const allowedOrigins = [
   "http://localhost:3000", // Geliştirme ortamı (React frontend)
   /\.plenvo\.com$/, // *.yourdomain.com şeklindeki tüm subdomainler için izin
-  "https://api.plenvo.com",
+  "https://api.plenvo.app",
 ];
 
 const corsOptions = {
