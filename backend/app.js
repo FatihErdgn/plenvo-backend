@@ -16,6 +16,7 @@ require("./jobs/updateAppointmentStatus");
 
 // Express App Başlat
 const app = express();
+app.set("trust proxy", 1);
 
 // CORS Ayarları
 const allowedOrigins = [
