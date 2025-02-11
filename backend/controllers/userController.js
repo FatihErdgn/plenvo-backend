@@ -120,7 +120,6 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// Kullanıcı bilgilerini düzenleme
 exports.updateUser = async (req, res) => {
   try {
     const { role } = req.user; // JWT'den gelen kullanıcı rolü
@@ -132,9 +131,11 @@ exports.updateUser = async (req, res) => {
     const { id } = req.params; // Düzenlenecek kullanıcı ID'si
     const updatedData = { ...req.body };
 
-    // 1) Gönderilen roleName varsa, Role tablosundan bulup user rolünü güncelle
+    // 1) Eğer roleName gönderildiyse, Role koleksiyonundan bulup roleId'yi güncelleyelim
     if (updatedData.roleName) {
-      const foundRole = await Role.findOne({ roleName: updatedData.roleName });
+      // Tutarlılık için roleName'i küçük harfe çeviriyoruz (veritabanında da böyle saklanıyorsa)
+      const lowerCaseRoleName = updatedData.roleName.toLowerCase();
+      const foundRole = await Role.findOne({ roleName: lowerCaseRoleName });
       if (!foundRole) {
         return res.status(400).json({
           success: false,
@@ -142,10 +143,10 @@ exports.updateUser = async (req, res) => {
         });
       }
       updatedData.roleId = foundRole._id;
-      delete updatedData.roleName; // user schema'da roleName direkt saklanmıyor
+      delete updatedData.roleName; // Şemada roleName yok, sadece roleId saklıyoruz
     }
 
-    // 2) Gönderilen clinicName varsa, Clinic tablosundan bulup clinicId'yi güncelle
+    // 2) Eğer clinicName gönderildiyse, Clinic koleksiyonundan bulup clinicId'yi güncelleyelim
     if (updatedData.clinicName) {
       const foundClinic = await Clinic.findOne({
         clinicName: updatedData.clinicName,
@@ -157,10 +158,10 @@ exports.updateUser = async (req, res) => {
         });
       }
       updatedData.clinicId = foundClinic._id;
-      delete updatedData.clinicName; // user schema'da clinicName direkt saklanmıyor
+      delete updatedData.clinicName;
     }
 
-    // 3) Kullanıcıyı bul
+    // 3) Kullanıcıyı bulalım
     const user = await User.findById(id);
     if (!user) {
       return res
@@ -168,12 +169,10 @@ exports.updateUser = async (req, res) => {
         .json({ success: false, message: "Kullanıcı bulunamadı." });
     }
 
-    // 4) updatedData içindeki alanları user nesnesine kopyala
-    //    (örn. firstName, lastName, hireDate vb.)
+    // 4) Güncellenmesi gereken alanları user nesnesine kopyala
     Object.assign(user, updatedData);
 
-    // 5) Şifre güncelleniyorsa, mongoose'un pre('save') hook'u tetiklenecek
-    //    ve orada hash işlemi yapılacak.
+    // 5) Şifre güncellenecekse pre('save') hook'u hash işlemini yapacak
     await user.save();
 
     // 6) Başarılı yanıt
@@ -187,6 +186,7 @@ exports.updateUser = async (req, res) => {
       .json({ success: false, message: "Kullanıcı güncellenemedi." });
   }
 };
+
 
 // Kullanıcı silme (soft delete)
 exports.deleteUser = async (req, res) => {
