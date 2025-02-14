@@ -70,6 +70,9 @@ const appointmentSchema = new mongoose.Schema({
   isDeleted: { type: Boolean, default: false }, // Soft delete alanı
   lastEditBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   lastEditDate: { type: Date },
+  smsImmediateSent: { type: Boolean, default: false },
+  smsReminderSent: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
 });
 
 appointmentSchema.pre("save", function (next) {
