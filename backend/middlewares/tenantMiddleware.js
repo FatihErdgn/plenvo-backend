@@ -6,7 +6,7 @@ const Customer = require("../models/Customer");
 const getCustomerFromSubdomain = async (hostname, req) => {
   // Localhost veya 127.0.0.1 ise dev ortamı
   if (hostname === "localhost" || hostname === "127.0.0.1") {
-    const localCustomer = await Customer.findOne({ customerDomain: "localdev" });
+    const localCustomer = await Customer.findOne({ customerDomain: "demo" });
     return localCustomer || null;
   }
 

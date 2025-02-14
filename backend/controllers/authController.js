@@ -8,7 +8,6 @@ exports.login = async (req, res) => {
 
     // 1) Subdomain'den çektiğimiz customer
     const customer = req.customer; // resolveCustomer middleware'den geliyor
-
     if (!customer) {
       return res
         .status(404)
