@@ -62,14 +62,17 @@ exports.createUser = async (req, res) => {
     }
 
     // Tarih validasyonu
-    const parsedDate = new Date(hireDate);
-    const isValidDate = parsedDate instanceof Date && !isNaN(parsedDate);
+    let parsedDate = null;
+    if (hireDate) {
+      parsedDate = new Date(hireDate);
+      const isValidDate = parsedDate instanceof Date && !isNaN(parsedDate);
 
-    if (!isValidDate) {
-      return res.status(400).json({
-        success: false,
-        message: "Geçersiz tarih formatı.",
-      });
+      if (!isValidDate) {
+        return res.status(400).json({
+          success: false,
+          message: "Geçersiz tarih formatı.",
+        });
+      }
     }
 
     // Şifre zorluk kontrolü
@@ -99,12 +102,15 @@ exports.createUser = async (req, res) => {
       speciality,
       salary,
       phoneNumber,
-      hireDate: parsedDate,
       clinicId: newClinic._id,
       customerId,
       password,
-      roleId: foundRole._id, // Sadece roleId saklıyoruz
+      roleId: foundRole._id,
     });
+
+    if (parsedDate) {
+      newUser.hireDate = parsedDate;
+    }
 
     await newUser.save();
 
@@ -186,7 +192,6 @@ exports.updateUser = async (req, res) => {
       .json({ success: false, message: "Kullanıcı güncellenemedi." });
   }
 };
-
 
 // Kullanıcı silme (soft delete)
 exports.deleteUser = async (req, res) => {

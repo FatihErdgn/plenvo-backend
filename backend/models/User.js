@@ -19,13 +19,13 @@ const UserSchema = new mongoose.Schema(
     },
 
     username: { type: String, required: true },
-    userMail: { type: String, required: true },
+    userMail: { type: String, required: false },
     password: { type: String, required: true },
 
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
 
-    phoneNumber: { type: String },
+    phoneNumber: { type: String, required: true },
 
     profession: { type: String },
     speciality: { type: String },
