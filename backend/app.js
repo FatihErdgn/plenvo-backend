@@ -13,6 +13,7 @@ const morgan = require("morgan");
 
 require("./jobs/reminderJob");
 require("./jobs/updateAppointmentStatus");
+require('./jobs/salaryExpensesJob'); // Yeni eklenen cron job dosyası
 
 // Express App Başlat
 const app = express();
