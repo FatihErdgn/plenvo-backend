@@ -254,7 +254,9 @@ exports.getUsers = async (req, res) => {
       ...user, // ❌ Yanlış: filteredUsers yerine user kullanmalıyız
       roleName: user.roleId?.roleName,
       clinicName: user.clinicId?.clinicName,
+      speciality: user.speciality,
     }));
+    // console.log(transformedUsers);
 
     res.status(200).json({ success: true, data: transformedUsers });
   } catch (err) {
