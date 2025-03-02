@@ -44,10 +44,10 @@ UserSchema.index(
   { username: 1 },
   { unique: true, partialFilterExpression: { isDeleted: false } }
 );
-UserSchema.index(
-  { userMail: 1 },
-  { unique: true, partialFilterExpression: { isDeleted: false } }
-);
+// UserSchema.index(
+//   { userMail: 1 },
+//   { unique: true, partialFilterExpression: { isDeleted: false } }
+// );
 
 // Şifre hashleme
 UserSchema.pre("save", async function (next) {
