@@ -37,7 +37,7 @@ exports.createCalendarAppointment = async (req, res) => {
         .json({ success: false, message: "Doktorun randevu oluşturma yetkisi yok." });
     }
 
-    const { doctorId, dayIndex, timeIndex, participants } = req.body;
+    const { doctorId, dayIndex, timeIndex, participants, description } = req.body;
     const customerId = req.user.customerId;
 
     // Basit validasyon
@@ -54,6 +54,7 @@ exports.createCalendarAppointment = async (req, res) => {
       dayIndex,
       timeIndex,
       participants,
+      description, // Açıklama alanını ekledik
     });
 
     await newAppointment.save();
@@ -78,7 +79,7 @@ exports.updateCalendarAppointment = async (req, res) => {
     }
 
     const appointmentId = req.params.id;
-    const { doctorId, dayIndex, timeIndex, participants } = req.body;
+    const { doctorId, dayIndex, timeIndex, participants, description } = req.body;
     const customerId = req.user.customerId;
 
     const appointment = await CalendarAppointment.findById(appointmentId);
@@ -98,6 +99,7 @@ exports.updateCalendarAppointment = async (req, res) => {
     appointment.dayIndex = dayIndex ?? appointment.dayIndex;
     appointment.timeIndex = timeIndex ?? appointment.timeIndex;
     appointment.participants = participants || appointment.participants;
+    appointment.description = description ?? appointment.description; // Açıklamayı güncelle
 
     await appointment.save();
     return res.json({ success: true, data: appointment });
