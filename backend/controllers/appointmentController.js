@@ -52,8 +52,8 @@ exports.createAppointment = async (req, res) => {
           !participant.clientFirstName ||
           !participant.clientLastName ||
           !participant.phoneNumber ||
-          !participant.gender ||
-          !participant.age
+          !participant.gender
+          // !participant.age
         ) {
           return res.status(400).json({
             success: false,
@@ -70,7 +70,7 @@ exports.createAppointment = async (req, res) => {
         !phoneNumber ||
         !datetime ||
         !gender ||
-        !age ||
+        // !age ||
         !clinic ||
         !doctor
       ) {
