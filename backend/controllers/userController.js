@@ -34,7 +34,7 @@ exports.createUser = async (req, res) => {
 
     const existingUser = await User.findOne({
       isDeleted: false,
-      $or: [{ username }, { userMail }, { phoneNumber }],
+      $or: [{ username }],
     });
 
     if (existingUser) {
