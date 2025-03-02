@@ -187,13 +187,22 @@ exports.createAppointment = async (req, res) => {
 };
 
 // getAppointments: Sayfalama ve sıralı randevu listesi getirme
+// getAppointments: Sayfalama ve sıralı randevu listesi getirme
 exports.getAppointments = async (req, res) => {
   try {
-    // Sadece ilgili müşteriye ait randevuları getir (token'dan customerId)
     const customerId = req.user.customerId;
-    const query = customerId
-      ? { customerId, isDeleted: false }
-      : { isDeleted: false };
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    let query = { isDeleted: false };
+
+    if (userRole === "doctor") {
+      // Eğer kullanıcı doktor ise, sadece kendi randevularını görsün
+      query.doctorId = userId;
+    } else if (customerId) {
+      // Eğer kullanıcı müşteriyle ilişkili bir rolse, customerId baz alınsın
+      query.customerId = customerId;
+    }
 
     const appointments = await Appointment.find(query)
       .populate("clinicId", "clinicName")
@@ -201,13 +210,11 @@ exports.getAppointments = async (req, res) => {
       .sort({ datetime: -1 }) // Son eklenen en üstte
       .lean();
 
-    const transformedAppointments = appointments.map((appointment) => {
-      return {
-        ...appointment,
-        clinicName: appointment.clinicId.clinicName,
-        doctorName: `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`,
-      };
-    });
+    const transformedAppointments = appointments.map((appointment) => ({
+      ...appointment,
+      clinicName: appointment.clinicId?.clinicName,
+      doctorName: `${appointment.doctorId?.firstName || ""} ${appointment.doctorId?.lastName || ""}`,
+    }));
 
     return res.status(200).json({
       success: true,

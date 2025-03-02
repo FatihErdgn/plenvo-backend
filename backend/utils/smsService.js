@@ -1,29 +1,31 @@
-const https = require('follow-redirects').https;
+const https = require("follow-redirects").https;
 
 const sendSMS = async (customer, toNumbers, messageText) => {
   return new Promise((resolve, reject) => {
     const options = {
-      method: 'POST',
+      method: "POST",
       hostname: process.env.INFOBIP_HOSTNAME, // Değişmeyecekse global hostname
-      path: '/sms/2/text/advanced',
+      path: "/whatsapp/1/message/template",
       headers: {
-        Authorization: `App ${customer.smsApiKey || process.env.INFOBIP_API_KEY}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+        Authorization: `App ${
+          customer.smsApiKey || process.env.INFOBIP_API_KEY
+        }`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
       },
       maxRedirects: 20,
     };
 
     const req = https.request(options, (res) => {
       let chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => {
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
         const body = Buffer.concat(chunks).toString();
-        console.log('Infobip Response:', body);
+        console.log("Infobip Response:", body);
         resolve(body);
       });
-      res.on('error', (error) => {
-        console.error('Infobip Error:', error);
+      res.on("error", (error) => {
+        console.error("Infobip Error:", error);
         reject(error);
       });
     });
@@ -33,7 +35,9 @@ const sendSMS = async (customer, toNumbers, messageText) => {
         {
           destinations: toNumbers.map((to) => ({ to })),
           from: customer.smsSenderId || process.env.INFOBIP_SENDER_ID,
-          text: messageText,
+          content: {
+            text: messageText,
+          },
         },
       ],
     });

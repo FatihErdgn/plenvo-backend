@@ -78,6 +78,7 @@ connectDB().then(async () => {
     app.use("/api/reminders", require("./routes/reminderRoutes"));
     app.use("/api/expenses", require("./routes/expenseRoutes"));
     app.use("/api/currencies", require("./routes/currencyRoutes"));
+    app.use("/api/calendar-appointments", require("./routes/calendarAppointmentRoutes"));
 
     // **Tüm route’ları konsola yazdıralım**
     console.log("✅ Yüklenen Route’lar:");

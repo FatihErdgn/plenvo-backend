@@ -9,7 +9,7 @@ const { checkPermission } = require("../middlewares/checkPermission");
 router.get(
   "/",
   authMiddleware,
-  checkPermission(["admin", "superadmin", "consultant", "manager"]),
+  checkPermission(["admin", "superadmin", "consultant", "manager","doctor"]),
   appointmentController.getAppointments
 );
 router.post(
