@@ -1,7 +1,7 @@
 // controllers/paymentController.js
-
 const Payment = require("../models/Payment");
 const Appointment = require("../models/Appointment");
+const CalendarAppointment = require("../models/CalendarAppointment");
 const Currency = require("../models/Currency");
 const Services = require("../models/Services");
 const mongoose = require("mongoose");
@@ -21,6 +21,8 @@ const mongoose = require("mongoose");
  * - Ödenen miktar toplam hizmet ücretine eşit ya da fazlaysa randevunun durumu "Tamamlandı"
  *   ve ilgili action'lar güncellenecektir.
  * - Ödenen miktar toplam ücretin altında ise randevu durumu "Ödeme Bekleniyor" olarak güncellenecektir.
+ * 
+ * Eğer Appointment şemasında randevu bulunamazsa, CalendarAppointment şemasına bakılır.
  */
 exports.createPayment = async (req, res) => {
   try {
@@ -40,7 +42,6 @@ exports.createPayment = async (req, res) => {
       !serviceIds ||
       !paymentMethod ||
       !paymentAmount ||
-      // !paymentDescription ||
       !appointmentId
     ) {
       return res.status(400).json({
@@ -57,8 +58,11 @@ exports.createPayment = async (req, res) => {
         .json({ success: false, message: "Müşteri kimliği bulunamadı." });
     }
 
-    // Randevuyu getirerek doctorId (userId) al
-    const appointment = await Appointment.findById(appointmentId);
+    // Randevuyu getir: önce Appointment, bulunamazsa CalendarAppointment şemasına bak.
+    let appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      appointment = await CalendarAppointment.findById(appointmentId);
+    }
     if (!appointment) {
       return res
         .status(404)
@@ -95,14 +99,11 @@ exports.createPayment = async (req, res) => {
         .json({ success: false, message: "Para birimi bulunamadı." });
     }
 
-    // Ödeme şeması oluşturuluyor.
-    // Burada ödeme durumu; ödenen tutarın toplam hizmet ücretine eşit veya fazlaysa "Tamamlandı",
-    // aksi durumda "Ödeme Bekleniyor" olarak ayarlanıyor.
     const newPayment = new Payment({
       customerId,
       currencyId: foundCurrency._id,
       userId,
-      serviceId: serviceIds, // Şema array tipindeyse bu şekilde, aksi halde uygun dönüşüm yapılmalı.
+      serviceId: serviceIds, // array
       appointmentId,
       paymentMethod,
       paymentAmount,
@@ -110,16 +111,14 @@ exports.createPayment = async (req, res) => {
       paymentStatus:
         paymentAmount >= totalServiceFee ? "Tamamlandı" : "Ödeme Bekleniyor",
       paymentDescription,
-      serviceFee: totalServiceFee, // Toplam hizmet ücreti
+      serviceFee: totalServiceFee,
       serviceDescription: serviceDescriptions.join(", "),
       isDeleted: false,
     });
 
     const savedPayment = await newPayment.save();
 
-    // Ödeme oluşturulduktan sonra ilgili randevunun status'unu güncelle
-    // Eğer ödenen tutar toplam hizmet ücretine eşit veya fazlaysa "Tamamlandı",
-    // aksi halde "Ödeme Bekleniyor" olarak ayarlıyoruz.
+    // Randevu durumunu güncelle (appointment, Appointment ya da CalendarAppointment)
     if (paymentAmount >= totalServiceFee) {
       appointment.status = "Tamamlandı";
       appointment.actions = {
@@ -156,19 +155,18 @@ exports.createPayment = async (req, res) => {
  * Ek olarak: Ödeme güncellendikten sonra, ilgili randevunun status'u
  * - Ödeme tutarı toplam hizmet ücretine eşit veya fazlaysa "Tamamlandı",
  * - Aksi halde "Ödeme Bekleniyor" olarak güncellenecektir.
+ * 
+ * Eğer Appointment şemasında randevu bulunamazsa, CalendarAppointment şemasına bakılır.
  */
 exports.updatePayment = async (req, res) => {
   try {
     const paymentId = req.params.id;
     const updateData = req.body;
 
-    // İlgili ödeme kaydı güncelleniyor.
     const updatedPayment = await Payment.findByIdAndUpdate(
       paymentId,
       updateData,
-      {
-        new: true,
-      }
+      { new: true }
     );
     if (!updatedPayment) {
       return res
@@ -176,12 +174,13 @@ exports.updatePayment = async (req, res) => {
         .json({ success: false, message: "Ödeme bulunamadı." });
     }
 
-    // Ödeme güncellendikten sonra, randevu durumunu güncellemek için ilgili randevuyu getiriyoruz.
-    // İlgili randevuyu getir
+    // Randevu güncellemesi için önce Appointment, bulunamazsa CalendarAppointment'dan al
     const appointmentId = updatedPayment.appointmentId;
-    const appointment = await Appointment.findById(appointmentId);
+    let appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      appointment = await CalendarAppointment.findById(appointmentId);
+    }
     if (appointment) {
-      // Toplam ödeme miktarını hesapla
       const paymentsAgg = await Payment.aggregate([
         { $match: { appointmentId: appointmentId, isDeleted: false } },
         { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
@@ -221,7 +220,7 @@ exports.updatePayment = async (req, res) => {
 
 /**
  * getPaymentsByAppointment: Belirtilen randevu ID'sine ait tüm aktif (isDeleted=false) ödeme kayıtlarını getirir.
- * Route örneği: GET /api/payments/appointment/:appointmentId
+ * Eğer randevu Appointment şemasında bulunamazsa, CalendarAppointment şemasına bakılır.
  */
 exports.getPaymentsByAppointment = async (req, res) => {
   try {
@@ -232,7 +231,18 @@ exports.getPaymentsByAppointment = async (req, res) => {
         .json({ success: false, message: "Appointment ID gereklidir." });
     }
 
-    // İlgili randevuya ait ödemeleri getiriyoruz.
+    // Randevuyu önce Appointment'tan arayalım, bulunamazsa CalendarAppointment'dan.
+    let appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      appointment = await CalendarAppointment.findById(appointmentId);
+    }
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Bu randevuya ait ödeme bulunamadı.",
+      });
+    }
+
     const payments = await Payment.find({ appointmentId, isDeleted: false });
     if (!payments || payments.length === 0) {
       return res.status(404).json({
@@ -251,7 +261,8 @@ exports.getPaymentsByAppointment = async (req, res) => {
 };
 
 /**
- * softDeletePayment: Ödemeyi soft delete yapar (isDeleted = true)
+ * softDeletePayment: Ödemeyi soft delete yapar (isDeleted = true).
+ * Eğer randevu Appointment şemasında bulunamazsa, CalendarAppointment şemasına bakılır.
  */
 exports.softDeletePayment = async (req, res) => {
   try {
@@ -266,6 +277,39 @@ exports.softDeletePayment = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Ödeme bulunamadı." });
     }
+
+    const appointmentId = updatedPayment.appointmentId;
+    let appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      appointment = await CalendarAppointment.findById(appointmentId);
+    }
+    if (appointment) {
+      const paymentsAgg = await Payment.aggregate([
+        { $match: { appointmentId: appointmentId, isDeleted: false } },
+        { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
+      ]);
+      const cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
+      const totalServiceFee = updatedPayment.serviceFee;
+      if (cumulativePaid >= totalServiceFee) {
+        appointment.status = "Tamamlandı";
+        appointment.actions = {
+          payNow: false,
+          reBook: true,
+          edit: false,
+          view: true,
+        };
+      } else {
+        appointment.status = "Ödeme Bekleniyor";
+        appointment.actions = {
+          payNow: true,
+          reBook: false,
+          edit: true,
+          view: true,
+        };
+      }
+      await appointment.save();
+    }
+
     return res.status(200).json({ success: true, payment: updatedPayment });
   } catch (err) {
     console.error("Soft Delete Payment Error:", err);

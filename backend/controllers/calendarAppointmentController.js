@@ -1,6 +1,7 @@
 // controllers/calendarAppointmentController.js
 const CalendarAppointment = require("../models/CalendarAppointment");
 const mongoose = require("mongoose");
+const User = require("../models/User");
 
 /**
  * GET /pilates-schedule?doctorId=...
@@ -11,12 +12,41 @@ exports.getCalendarAppointments = async (req, res) => {
     const { doctorId } = req.query;
     const customerId = req.user.customerId; // JWT'den
 
-    const query = { customerId };
+    const matchStage = { customerId: new mongoose.Types.ObjectId(customerId) };
     if (doctorId) {
-      query.doctorId = new mongoose.Types.ObjectId(doctorId);
+      matchStage.doctorId = new mongoose.Types.ObjectId(doctorId);
     }
 
-    const appointments = await CalendarAppointment.find(query).lean();
+    const appointments = await CalendarAppointment.aggregate([
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "users", // Users koleksiyon ismi (DB'deki ismi kontrol et)
+          localField: "doctorId",
+          foreignField: "_id",
+          as: "doctor",
+        },
+      },
+      {
+        $addFields: {
+          doctorName: {
+            $cond: {
+              if: { $gt: [{ $size: "$doctor" }, 0] },
+              then: {
+                $concat: [
+                  { $arrayElemAt: ["$doctor.firstName", 0] },
+                  " ",
+                  { $arrayElemAt: ["$doctor.lastName", 0] },
+                ],
+              },
+              else: "Unknown",
+            },
+          },
+        },
+      },
+      { $project: { doctor: 0 } }, // Gereksiz doctor dizisini kaldır
+    ]);
+
     return res.json({ success: true, data: appointments });
   } catch (err) {
     console.error("getCalendarAppointments error:", err);
@@ -34,10 +64,14 @@ exports.createCalendarAppointment = async (req, res) => {
     if (role === "doctor") {
       return res
         .status(403)
-        .json({ success: false, message: "Doktorun randevu oluşturma yetkisi yok." });
+        .json({
+          success: false,
+          message: "Doktorun randevu oluşturma yetkisi yok.",
+        });
     }
 
-    const { doctorId, dayIndex, timeIndex, participants, description } = req.body;
+    const { doctorId, dayIndex, timeIndex, participants, description } =
+      req.body;
     const customerId = req.user.customerId;
 
     // Basit validasyon
@@ -79,7 +113,8 @@ exports.updateCalendarAppointment = async (req, res) => {
     }
 
     const appointmentId = req.params.id;
-    const { doctorId, dayIndex, timeIndex, participants, description } = req.body;
+    const { doctorId, dayIndex, timeIndex, participants, description } =
+      req.body;
     const customerId = req.user.customerId;
 
     const appointment = await CalendarAppointment.findById(appointmentId);
@@ -91,7 +126,10 @@ exports.updateCalendarAppointment = async (req, res) => {
     if (appointment.customerId.toString() !== customerId.toString()) {
       return res
         .status(403)
-        .json({ success: false, message: "Farklı müşteri verisine erişim yok." });
+        .json({
+          success: false,
+          message: "Farklı müşteri verisine erişim yok.",
+        });
     }
 
     // Güncellemeler
@@ -134,7 +172,10 @@ exports.deleteCalendarAppointment = async (req, res) => {
     if (appointment.customerId.toString() !== customerId.toString()) {
       return res
         .status(403)
-        .json({ success: false, message: "Farklı müşteri verisine erişim yok." });
+        .json({
+          success: false,
+          message: "Farklı müşteri verisine erişim yok.",
+        });
     }
 
     await appointment.deleteOne();
