@@ -275,6 +275,13 @@ exports.updateAppointment = async (req, res) => {
         edit: false,
         view: true,
       };
+    } else if (["İptal Edildi"].includes(updateData.status)) {
+      updateData.actions = {
+        payNow: false,
+        reBook: false,
+        edit: true,
+        view: true,
+      };
     } else if (!updateData.actions) {
       // Diğer durumlarda varsayılan actions
       updateData.actions = {
