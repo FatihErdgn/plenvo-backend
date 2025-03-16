@@ -268,7 +268,7 @@ exports.updateAppointment = async (req, res) => {
     updateData.lastEditDate = new Date();
 
     // Eğer status "İptal Edildi" veya "Tamamlandı" ise actions sabitlenir
-    if (["İptal Edildi", "Tamamlandı"].includes(updateData.status)) {
+    if (["Tamamlandı"].includes(updateData.status)) { //burda iptal edildi durumunu kaldırdım
       updateData.actions = {
         payNow: false,
         reBook: true,
