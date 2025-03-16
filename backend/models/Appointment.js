@@ -57,6 +57,7 @@ const appointmentSchema = new mongoose.Schema({
   // Örnek: "Açık", "Ödeme Bekleniyor", "Tamamlandı", "İptal Edildi" ...
   // Sabitlemek isterseniz enum tanımlayabilirsiniz
   status: { type: String, required: true },
+  statusComment: { type: String },
 
   // Alt nesne
   actions: actionsSchema,

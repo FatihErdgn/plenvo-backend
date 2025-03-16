@@ -24,6 +24,7 @@ const mongoose = require("mongoose");
  * 
  * Eğer Appointment şemasında randevu bulunamazsa, CalendarAppointment şemasına bakılır.
  */
+// controllers/paymentController.js
 exports.createPayment = async (req, res) => {
   try {
     const {
@@ -36,7 +37,6 @@ exports.createPayment = async (req, res) => {
       paymentDate, // opsiyonel
     } = req.body;
 
-    // Gerekli alan kontrolü
     if (
       !currencyName ||
       !serviceIds ||
@@ -50,7 +50,6 @@ exports.createPayment = async (req, res) => {
       });
     }
 
-    // customerId token üzerinden
     const customerId = req.user.customerId;
     if (!customerId) {
       return res
@@ -58,10 +57,12 @@ exports.createPayment = async (req, res) => {
         .json({ success: false, message: "Müşteri kimliği bulunamadı." });
     }
 
-    // Randevuyu getir: önce Appointment, bulunamazsa CalendarAppointment şemasına bak.
+    // Randevuyu önce Appointment, bulunamazsa CalendarAppointment’dan çekiyoruz.
     let appointment = await Appointment.findById(appointmentId);
+    let isCalendar = false;
     if (!appointment) {
       appointment = await CalendarAppointment.findById(appointmentId);
+      if (appointment) isCalendar = true;
     }
     if (!appointment) {
       return res
@@ -70,13 +71,12 @@ exports.createPayment = async (req, res) => {
     }
     const userId = appointment.doctorId;
 
-    // Seçilen hizmetlerin (serviceIds) detaylarını getir
+    // Seçilen hizmetlerin detaylarını getiriyoruz.
     const services = await Services.find({
       _id: { $in: serviceIds.map((id) => new mongoose.Types.ObjectId(id)) },
       isDeleted: false,
       status: "Aktif",
     });
-
     if (services.length === 0) {
       return res.status(400).json({
         success: false,
@@ -88,8 +88,6 @@ exports.createPayment = async (req, res) => {
       0
     );
     const serviceDescriptions = services.map((svc) => svc.serviceName);
-
-    // Ödeme tarihi: verilmediyse şimdiki tarih
     const paymentDateFinal = paymentDate ? new Date(paymentDate) : new Date();
 
     const foundCurrency = await Currency.findOne({ currencyName });
@@ -103,7 +101,7 @@ exports.createPayment = async (req, res) => {
       customerId,
       currencyId: foundCurrency._id,
       userId,
-      serviceId: serviceIds, // array
+      serviceId: serviceIds,
       appointmentId,
       paymentMethod,
       paymentAmount,
@@ -118,25 +116,57 @@ exports.createPayment = async (req, res) => {
 
     const savedPayment = await newPayment.save();
 
-    // Randevu durumunu güncelle (appointment, Appointment ya da CalendarAppointment)
+    // Randevu durumunu güncelle:
     if (paymentAmount >= totalServiceFee) {
-      appointment.status = "Tamamlandı";
-      appointment.actions = {
-        payNow: false,
-        reBook: true,
-        edit: false,
-        view: true,
-      };
+      if (isCalendar) {
+        // Aynı bookingId’ye sahip tüm CalendarAppointment’ları güncelle
+        await CalendarAppointment.updateMany(
+          { bookingId: appointment.bookingId },
+          {
+            status: "Tamamlandı",
+            actions: {
+              payNow: false,
+              reBook: true,
+              edit: false,
+              view: true,
+            },
+          }
+        );
+      } else {
+        appointment.status = "Tamamlandı";
+        appointment.actions = {
+          payNow: false,
+          reBook: true,
+          edit: false,
+          view: true,
+        };
+        await appointment.save();
+      }
     } else {
-      appointment.status = "Ödeme Bekleniyor";
-      appointment.actions = {
-        payNow: true,
-        reBook: false,
-        edit: true,
-        view: true,
-      };
+      if (isCalendar) {
+        await CalendarAppointment.updateMany(
+          { bookingId: appointment.bookingId },
+          {
+            status: "Ödeme Bekleniyor",
+            actions: {
+              payNow: true,
+              reBook: false,
+              edit: true,
+              view: true,
+            },
+          }
+        );
+      } else {
+        appointment.status = "Ödeme Bekleniyor";
+        appointment.actions = {
+          payNow: true,
+          reBook: false,
+          edit: true,
+          view: true,
+        };
+        await appointment.save();
+      }
     }
-    await appointment.save();
 
     return res.status(201).json({ success: true, payment: savedPayment });
   } catch (err) {
@@ -147,6 +177,7 @@ exports.createPayment = async (req, res) => {
     });
   }
 };
+
 
 /**
  * updatePayment: Mevcut ödemeyi günceller.
@@ -174,38 +205,73 @@ exports.updatePayment = async (req, res) => {
         .json({ success: false, message: "Ödeme bulunamadı." });
     }
 
-    // Randevu güncellemesi için önce Appointment, bulunamazsa CalendarAppointment'dan al
     const appointmentId = updatedPayment.appointmentId;
     let appointment = await Appointment.findById(appointmentId);
+    let isCalendar = false;
     if (!appointment) {
       appointment = await CalendarAppointment.findById(appointmentId);
+      if (appointment) isCalendar = true;
     }
     if (appointment) {
-      const paymentsAgg = await Payment.aggregate([
-        { $match: { appointmentId: appointmentId, isDeleted: false } },
-        { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
-      ]);
-      const cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
-      const totalServiceFee = updatedPayment.serviceFee;
-
-      if (cumulativePaid >= totalServiceFee) {
-        appointment.status = "Tamamlandı";
-        appointment.actions = {
-          payNow: false,
-          reBook: true,
-          edit: false,
-          view: true,
-        };
+      let cumulativePaid, totalServiceFee;
+      if (isCalendar) {
+        const bookingId = appointment.bookingId;
+        const relatedAppointments = await CalendarAppointment.find({ bookingId });
+        const relatedAppointmentIds = relatedAppointments.map(appt => appt._id);
+        const paymentsAgg = await Payment.aggregate([
+          { $match: { appointmentId: { $in: relatedAppointmentIds }, isDeleted: false } },
+          { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
+        ]);
+        cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
+        totalServiceFee = updatedPayment.serviceFee;
+        let newStatus, newActions;
+        if (cumulativePaid >= totalServiceFee) {
+          newStatus = "Tamamlandı";
+          newActions = {
+            payNow: false,
+            reBook: true,
+            edit: false,
+            view: true,
+          };
+        } else {
+          newStatus = "Ödeme Bekleniyor";
+          newActions = {
+            payNow: true,
+            reBook: false,
+            edit: true,
+            view: true,
+          };
+        }
+        await CalendarAppointment.updateMany(
+          { bookingId: appointment.bookingId },
+          { status: newStatus, actions: newActions }
+        );
       } else {
-        appointment.status = "Ödeme Bekleniyor";
-        appointment.actions = {
-          payNow: true,
-          reBook: false,
-          edit: true,
-          view: true,
-        };
+        const paymentsAgg = await Payment.aggregate([
+          { $match: { appointmentId: appointmentId, isDeleted: false } },
+          { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
+        ]);
+        cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
+        totalServiceFee = updatedPayment.serviceFee;
+        if (cumulativePaid >= totalServiceFee) {
+          appointment.status = "Tamamlandı";
+          appointment.actions = {
+            payNow: false,
+            reBook: true,
+            edit: false,
+            view: true,
+          };
+        } else {
+          appointment.status = "Ödeme Bekleniyor";
+          appointment.actions = {
+            payNow: true,
+            reBook: false,
+            edit: true,
+            view: true,
+          };
+        }
+        await appointment.save();
       }
-      await appointment.save();
     }
 
     return res.status(200).json({ success: true, payment: updatedPayment });
@@ -218,6 +284,7 @@ exports.updatePayment = async (req, res) => {
   }
 };
 
+
 /**
  * getPaymentsByAppointment: Belirtilen randevu ID'sine ait tüm aktif (isDeleted=false) ödeme kayıtlarını getirir.
  * Eğer randevu Appointment şemasında bulunamazsa, CalendarAppointment şemasına bakılır.
@@ -226,24 +293,34 @@ exports.getPaymentsByAppointment = async (req, res) => {
   try {
     const appointmentId = req.params.appointmentId;
     if (!appointmentId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Appointment ID gereklidir." });
+      return res.status(400).json({ success: false, message: "Appointment ID gereklidir." });
     }
 
-    // Randevuyu önce Appointment'tan arayalım, bulunamazsa CalendarAppointment'dan.
+    // Önce Appointment'da arıyoruz; yoksa CalendarAppointment'dan çekiyoruz.
     let appointment = await Appointment.findById(appointmentId);
+    let isCalendar = false;
     if (!appointment) {
       appointment = await CalendarAppointment.findById(appointmentId);
-    }
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Bu randevuya ait ödeme bulunamadı.",
-      });
+      if (!appointment) {
+        return res.status(404).json({
+          success: false,
+          message: "Bu randevuya ait ödeme bulunamadı.",
+        });
+      }
+      isCalendar = true;
     }
 
-    const payments = await Payment.find({ appointmentId, isDeleted: false });
+    let payments;
+    if (isCalendar) {
+      // Aynı bookingId’ye sahip tüm CalendarAppointment’ların _id’lerini alıyoruz.
+      const bookingId = appointment.bookingId;
+      const relatedAppointments = await CalendarAppointment.find({ bookingId });
+      const relatedAppointmentIds = relatedAppointments.map(appt => appt._id);
+      payments = await Payment.find({ appointmentId: { $in: relatedAppointmentIds }, isDeleted: false });
+    } else {
+      payments = await Payment.find({ appointmentId, isDeleted: false });
+    }
+
     if (!payments || payments.length === 0) {
       return res.status(404).json({
         success: false,
@@ -259,6 +336,7 @@ exports.getPaymentsByAppointment = async (req, res) => {
     });
   }
 };
+
 
 /**
  * softDeletePayment: Ödemeyi soft delete yapar (isDeleted = true).
@@ -280,41 +358,79 @@ exports.softDeletePayment = async (req, res) => {
 
     const appointmentId = updatedPayment.appointmentId;
     let appointment = await Appointment.findById(appointmentId);
+    let isCalendar = false;
     if (!appointment) {
       appointment = await CalendarAppointment.findById(appointmentId);
+      if (appointment) isCalendar = true;
     }
     if (appointment) {
-      const paymentsAgg = await Payment.aggregate([
-        { $match: { appointmentId: appointmentId, isDeleted: false } },
-        { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
-      ]);
-      const cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
-      const totalServiceFee = updatedPayment.serviceFee;
-      if (cumulativePaid >= totalServiceFee) {
-        appointment.status = "Tamamlandı";
-        appointment.actions = {
-          payNow: false,
-          reBook: true,
-          edit: false,
-          view: true,
-        };
+      let cumulativePaid, totalServiceFee;
+      if (isCalendar) {
+        const bookingId = appointment.bookingId;
+        const relatedAppointments = await CalendarAppointment.find({ bookingId });
+        const relatedAppointmentIds = relatedAppointments.map(appt => appt._id);
+        const paymentsAgg = await Payment.aggregate([
+          { $match: { appointmentId: { $in: relatedAppointmentIds }, isDeleted: false } },
+          { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
+        ]);
+        cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
+        totalServiceFee = updatedPayment.serviceFee;
+        let newStatus, newActions;
+        if (cumulativePaid >= totalServiceFee) {
+          newStatus = "Tamamlandı";
+          newActions = {
+            payNow: false,
+            reBook: true,
+            edit: false,
+            view: true,
+          };
+        } else {
+          newStatus = "Ödeme Bekleniyor";
+          newActions = {
+            payNow: true,
+            reBook: false,
+            edit: true,
+            view: true,
+          };
+        }
+        await CalendarAppointment.updateMany(
+          { bookingId: appointment.bookingId },
+          { status: newStatus, actions: newActions }
+        );
       } else {
-        appointment.status = "Ödeme Bekleniyor";
-        appointment.actions = {
-          payNow: true,
-          reBook: false,
-          edit: true,
-          view: true,
-        };
+        const paymentsAgg = await Payment.aggregate([
+          { $match: { appointmentId: appointmentId, isDeleted: false } },
+          { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
+        ]);
+        cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
+        totalServiceFee = updatedPayment.serviceFee;
+        if (cumulativePaid >= totalServiceFee) {
+          appointment.status = "Tamamlandı";
+          appointment.actions = {
+            payNow: false,
+            reBook: true,
+            edit: false,
+            view: true,
+          };
+        } else {
+          appointment.status = "Ödeme Bekleniyor";
+          appointment.actions = {
+            payNow: true,
+            reBook: false,
+            edit: true,
+            view: true,
+          };
+        }
+        await appointment.save();
       }
-      await appointment.save();
     }
 
     return res.status(200).json({ success: true, payment: updatedPayment });
   } catch (err) {
     console.error("Soft Delete Payment Error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Ödeme silinirken bir hata oluştu." });
+    return res.status(500).json({
+      success: false,
+      message: "Ödeme silinirken bir hata oluştu.",
+    });
   }
 };

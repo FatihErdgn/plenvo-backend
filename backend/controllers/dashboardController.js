@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Payment = require("../models/Payment");
 const Expense = require("../models/Expense");
 const Appointment = require("../models/Appointment");
+const CalendarAppointment = require("../models/CalendarAppointment");
 
 /**
  * GET /api/dashboard
@@ -16,7 +17,7 @@ const Appointment = require("../models/Appointment");
  * - Eğer giriş yapan kullanıcı admin/superadmin/manager ise:
  *    - Eğer doctorId query parametresi varsa, o doktorun verileri alınır:
  *         * Payment ve Appointment için filtre uygulanır.
- *         * Bu durumda Expense değeri 0 olarak kabul edilir ve 
+ *         * Bu durumda Expense değeri 0 olarak kabul edilir ve
  *           Kar (profit) toplam gelirin %40'ı olarak hesaplanır.
  *    - Eğer doctorId parametresi yoksa, tüm veriler normal şekilde (Payment, Expense, profit) getirilir.
  */
@@ -45,10 +46,13 @@ exports.getDashboardData = async (req, res) => {
     // loggedInRole: "doctor", "admin", "manager", "superadmin"
     const loggedInRole = req.user.role;
     // Doktor rolündeyken, ID dönüşümü önemli (örneğin ObjectId'ye çevirme)
-    const loggedInUserId = new mongoose.Types.ObjectId(req.user.userId || req.user._id);
+    const loggedInUserId = new mongoose.Types.ObjectId(
+      req.user.userId || req.user._id
+    );
 
     // Admin/superadmin/manager ise ve doctorId parametresi varsa, doktor filtresi uygulanacak.
-    const isDoctorFilter = (["admin", "superadmin", "manager"].includes(loggedInRole) && doctorId);
+    const isDoctorFilter =
+      ["admin", "superadmin", "manager"].includes(loggedInRole) && doctorId;
 
     /* PAYMENT AGGREGATION */
     let paymentMatch = {
@@ -101,7 +105,11 @@ exports.getDashboardData = async (req, res) => {
         { $match: expenseMatch },
         {
           $group: {
-            _id: { date: { $dateToString: { format: dateFormat, date: "$expenseDate" } } },
+            _id: {
+              date: {
+                $dateToString: { format: dateFormat, date: "$expenseDate" },
+              },
+            },
             dailyExpense: { $sum: "$expenseAmount" },
           },
         },
@@ -127,16 +135,53 @@ exports.getDashboardData = async (req, res) => {
       isDeleted: false,
       customerId,
     };
+
+    // CalendarAppointment aggregation
+    let calendarPatientMatch = {
+      customerId,
+      bookingId: { $exists: true },
+    };
+
     if (loggedInRole === "doctor") {
       appointmentMatch.doctorId = loggedInUserId;
+      calendarPatientMatch.doctorId = loggedInUserId;
     } else if (isDoctorFilter) {
       appointmentMatch.doctorId = new mongoose.Types.ObjectId(doctorId);
+      calendarPatientMatch.doctorId = new mongoose.Types.ObjectId(doctorId);
     }
     const patientResult = await Appointment.aggregate([
       { $match: appointmentMatch },
       { $count: "totalPatients" },
     ]);
-    const totalPatientCount = patientResult[0]?.totalPatients || 0;
+
+    const calendarPatientResult = await CalendarAppointment.aggregate([
+      { $match: calendarPatientMatch },
+      {
+        $group: {
+          _id: "$bookingId",
+          participants: { $first: "$participants" }, // Aynı bookingId'li kayıtlar için diziyi alıyoruz
+        },
+      },
+      {
+        $project: {
+          participantCount: { $size: "$participants" }, // Dizideki eleman sayısı
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalPatients: { $sum: "$participantCount" }, // Tüm bookingId'ler için toplam katılımcı sayısı
+        },
+      },
+    ]);
+
+    // console.log("calendarPatientResult", calendarPatientResult);
+
+    const totalPatientCount =
+      (patientResult[0]?.totalPatients || 0) +
+      (calendarPatientResult[0]?.totalPatients || 0);
+
+    // console.log("totalPatientCount", totalPatientCount);
 
     /* TREND AGGREGATIONS */
     // Payment trend aggregation
@@ -145,7 +190,9 @@ exports.getDashboardData = async (req, res) => {
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: dateFormat, date: "$paymentDate" } },
+            date: {
+              $dateToString: { format: dateFormat, date: "$paymentDate" },
+            },
           },
           dailyIncome: {
             $sum:
@@ -182,7 +229,9 @@ exports.getDashboardData = async (req, res) => {
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: dateFormat, date: "$appointmentDate" } },
+            date: {
+              $dateToString: { format: dateFormat, date: "$appointmentDate" },
+            },
           },
           dailyPatients: { $sum: 1 },
         },
@@ -214,7 +263,8 @@ exports.getDashboardData = async (req, res) => {
     dateArray.forEach((date) => {
       const inc = incomeMap[date] || 0;
       // Eğer loggedInRole doctor veya doktor filtresi varsa, gider 0
-      const exp = (loggedInRole === "doctor" || isDoctorFilter) ? 0 : (expenseMap[date] || 0);
+      const exp =
+        loggedInRole === "doctor" || isDoctorFilter ? 0 : expenseMap[date] || 0;
       let profitForDay = 0;
       if (loggedInRole === "doctor") {
         // Doktor rolündeyse, Payment aggregation'da %40 uygulanmış durumda.
@@ -277,7 +327,7 @@ exports.getDashboardData = async (req, res) => {
 
     // Gider Breakdown: eğer doctor veya doktor filtresi varsa boş, aksi halde normal aggregation
     const expenseDescriptions =
-      (loggedInRole === "doctor" || isDoctorFilter)
+      loggedInRole === "doctor" || isDoctorFilter
         ? []
         : expenseBreakdownAgg.map((doc) => ({
             description: doc._id,

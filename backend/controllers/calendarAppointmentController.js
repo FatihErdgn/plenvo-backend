@@ -70,7 +70,7 @@ exports.createCalendarAppointment = async (req, res) => {
         });
     }
 
-    const { doctorId, dayIndex, timeIndex, participants, description } =
+    const { doctorId, dayIndex, timeIndex, participants, description, bookingId } =
       req.body;
     const customerId = req.user.customerId;
 
@@ -81,6 +81,9 @@ exports.createCalendarAppointment = async (req, res) => {
         .json({ success: false, message: "Eksik alanlar var." });
     }
 
+    // Eğer front-end bookingId göndermediyse yeni oluştur.
+    const finalBookingId = bookingId || new mongoose.Types.ObjectId().toString();
+
     // Randevu oluştur
     const newAppointment = new CalendarAppointment({
       customerId,
@@ -89,6 +92,7 @@ exports.createCalendarAppointment = async (req, res) => {
       timeIndex,
       participants,
       description, // Açıklama alanını ekledik
+      bookingId: finalBookingId,
     });
 
     await newAppointment.save();
@@ -132,7 +136,7 @@ exports.updateCalendarAppointment = async (req, res) => {
         });
     }
 
-    // Güncellemeler
+    // Güncellemeler (bookingId sabit kalır)
     appointment.doctorId = doctorId || appointment.doctorId;
     appointment.dayIndex = dayIndex ?? appointment.dayIndex;
     appointment.timeIndex = timeIndex ?? appointment.timeIndex;

@@ -20,6 +20,7 @@ exports.createAppointment = async (req, res) => {
       doctor,
       type,
       participants,
+      statusComment,
     } = req.body;
 
     // Randevu tipi kontrolü
@@ -164,6 +165,7 @@ exports.createAppointment = async (req, res) => {
       phoneNumber,
       datetime: apptDate,
       status,
+      statusComment,
       actions,
       gender,
       age,
@@ -213,7 +215,9 @@ exports.getAppointments = async (req, res) => {
     const transformedAppointments = appointments.map((appointment) => ({
       ...appointment,
       clinicName: appointment.clinicId?.clinicName,
-      doctorName: `${appointment.doctorId?.firstName || ""} ${appointment.doctorId?.lastName || ""}`,
+      doctorName: `${appointment.doctorId?.firstName || ""} ${
+        appointment.doctorId?.lastName || ""
+      }`,
     }));
 
     return res.status(200).json({
