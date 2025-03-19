@@ -263,12 +263,25 @@ exports.updateAppointment = async (req, res) => {
       updateData.datetime = newDate;
     }
 
+    // Eğer status "İptal Edildi" ise, statusComment alanı zorunlu olsun
+    if (
+      updateData.status === "İptal Edildi" &&
+      (!updateData.statusComment || !updateData.statusComment.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Lütfen iptal nedeni giriniz.",
+      });
+    }
+
     // lastEditBy ve lastEditDate ayarlanıyor (req.user, authentication middleware tarafından doldurulmalı)
     updateData.lastEditBy = req.user._id;
     updateData.lastEditDate = new Date();
 
     // Eğer status "İptal Edildi" veya "Tamamlandı" ise actions sabitlenir
-    if (["Tamamlandı"].includes(updateData.status)) { //burda iptal edildi durumunu kaldırdım
+    if (["Tamamlandı"].includes(updateData.status)) {
+      //burda iptal edildi durumunu kaldırdım
       updateData.actions = {
         payNow: false,
         reBook: true,
