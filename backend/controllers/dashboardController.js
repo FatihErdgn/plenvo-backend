@@ -11,7 +11,7 @@ const CalendarAppointment = require("../models/CalendarAppointment");
  * Not:
  * - Eğer giriş yapan kullanıcı "doctor" ise:
  *    - Sadece kendi verileri gösterilir (Payment, Appointment için filtre uygulanır).
- *    - Payment değerleri, serviceFee üzerinden %40 ile hesaplanır.
+ *    - Payment değerleri, paymentAmount üzerinden %40 ile hesaplanır.
  *    - Expense verisi 0, dolayısıyla profit = totalIncome olarak gönderilir.
  *
  * - Eğer giriş yapan kullanıcı admin/superadmin/manager ise:
@@ -75,8 +75,8 @@ exports.getDashboardData = async (req, res) => {
           totalIncome: {
             $sum:
               loggedInRole === "doctor"
-                ? { $multiply: ["$serviceFee", 0.4] }
-                : "$serviceFee",
+                ? { $multiply: ["$paymentAmount", 0.4] }
+                : "$paymentAmount",
           },
         },
       },
@@ -197,8 +197,8 @@ exports.getDashboardData = async (req, res) => {
           dailyIncome: {
             $sum:
               loggedInRole === "doctor"
-                ? { $multiply: ["$serviceFee", 0.4] }
-                : "$serviceFee",
+                ? { $multiply: ["$paymentAmount", 0.4] }
+                : "$paymentAmount",
           },
         },
       },
@@ -313,8 +313,8 @@ exports.getDashboardData = async (req, res) => {
           amount: {
             $sum:
               loggedInRole === "doctor"
-                ? { $multiply: ["$serviceFee", 0.4] }
-                : "$serviceFee",
+                ? { $multiply: ["$paymentAmount", 0.4] }
+                : "$paymentAmount",
           },
         },
       },
