@@ -57,7 +57,7 @@ exports.getDashboardData = async (req, res) => {
     /* PAYMENT AGGREGATION */
     let paymentMatch = {
       paymentDate: { $gte: start, $lte: end },
-      paymentStatus: "Tamamlandı",
+      paymentStatus: { $in: ["Tamamlandı", "Ödeme Bekleniyor"] },
       isDeleted: false,
       customerId,
     };
