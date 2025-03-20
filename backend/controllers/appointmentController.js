@@ -303,6 +303,13 @@ exports.updateAppointment = async (req, res) => {
         edit: true,
         view: true,
       };
+    } else {
+      updateData.actions = {
+        payNow: true,
+        reBook: false,
+        edit: true,
+        view: true,
+      };
     }
 
     const updatedAppointment = await Appointment.findByIdAndUpdate(
