@@ -21,7 +21,7 @@ const mongoose = require("mongoose");
  * - Ödenen miktar toplam hizmet ücretine eşit ya da fazlaysa randevunun durumu "Tamamlandı"
  *   ve ilgili action'lar güncellenecektir.
  * - Ödenen miktar toplam ücretin altında ise randevu durumu "Ödeme Bekleniyor" olarak güncellenecektir.
- * 
+ *
  * Eğer Appointment şemasında randevu bulunamazsa, CalendarAppointment şemasına bakılır.
  */
 // controllers/paymentController.js
@@ -178,7 +178,6 @@ exports.createPayment = async (req, res) => {
   }
 };
 
-
 /**
  * updatePayment: Mevcut ödemeyi günceller.
  * Örneğin kısmi ödeme yapıldığında ya da ödeme tamamlandığında, ödeme güncellenir.
@@ -186,7 +185,7 @@ exports.createPayment = async (req, res) => {
  * Ek olarak: Ödeme güncellendikten sonra, ilgili randevunun status'u
  * - Ödeme tutarı toplam hizmet ücretine eşit veya fazlaysa "Tamamlandı",
  * - Aksi halde "Ödeme Bekleniyor" olarak güncellenecektir.
- * 
+ *
  * Eğer Appointment şemasında randevu bulunamazsa, CalendarAppointment şemasına bakılır.
  */
 exports.updatePayment = async (req, res) => {
@@ -216,10 +215,19 @@ exports.updatePayment = async (req, res) => {
       let cumulativePaid, totalServiceFee;
       if (isCalendar) {
         const bookingId = appointment.bookingId;
-        const relatedAppointments = await CalendarAppointment.find({ bookingId });
-        const relatedAppointmentIds = relatedAppointments.map(appt => appt._id);
+        const relatedAppointments = await CalendarAppointment.find({
+          bookingId,
+        });
+        const relatedAppointmentIds = relatedAppointments.map(
+          (appt) => appt._id
+        );
         const paymentsAgg = await Payment.aggregate([
-          { $match: { appointmentId: { $in: relatedAppointmentIds }, isDeleted: false } },
+          {
+            $match: {
+              appointmentId: { $in: relatedAppointmentIds },
+              isDeleted: false,
+            },
+          },
           { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
         ]);
         cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
@@ -284,7 +292,6 @@ exports.updatePayment = async (req, res) => {
   }
 };
 
-
 /**
  * getPaymentsByAppointment: Belirtilen randevu ID'sine ait tüm aktif (isDeleted=false) ödeme kayıtlarını getirir.
  * Eğer randevu Appointment şemasında bulunamazsa, CalendarAppointment şemasına bakılır.
@@ -293,7 +300,9 @@ exports.getPaymentsByAppointment = async (req, res) => {
   try {
     const appointmentId = req.params.appointmentId;
     if (!appointmentId) {
-      return res.status(400).json({ success: false, message: "Appointment ID gereklidir." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Appointment ID gereklidir." });
     }
 
     // Önce Appointment'da arıyoruz; yoksa CalendarAppointment'dan çekiyoruz.
@@ -315,18 +324,24 @@ exports.getPaymentsByAppointment = async (req, res) => {
       // Aynı bookingId’ye sahip tüm CalendarAppointment’ların _id’lerini alıyoruz.
       const bookingId = appointment.bookingId;
       const relatedAppointments = await CalendarAppointment.find({ bookingId });
-      const relatedAppointmentIds = relatedAppointments.map(appt => appt._id);
-      payments = await Payment.find({ appointmentId: { $in: relatedAppointmentIds }, isDeleted: false });
+      const relatedAppointmentIds = relatedAppointments.map((appt) => appt._id);
+      payments = await Payment.find({
+        appointmentId: { $in: relatedAppointmentIds },
+        isDeleted: false,
+      });
     } else {
       payments = await Payment.find({ appointmentId, isDeleted: false });
     }
 
+    // Eğer ödeme kaydı yoksa 404 yerine 200 dönüp boş liste gönderebilirsiniz
     if (!payments || payments.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Bu randevuya ait ödeme bulunamadı.",
+      return res.status(200).json({
+        success: true,
+        payments: [],
       });
     }
+
+    
     return res.status(200).json({ success: true, payments });
   } catch (err) {
     console.error("Get Payments By Appointment Error:", err);
@@ -336,7 +351,6 @@ exports.getPaymentsByAppointment = async (req, res) => {
     });
   }
 };
-
 
 /**
  * softDeletePayment: Ödemeyi soft delete yapar (isDeleted = true).
@@ -367,10 +381,19 @@ exports.softDeletePayment = async (req, res) => {
       let cumulativePaid, totalServiceFee;
       if (isCalendar) {
         const bookingId = appointment.bookingId;
-        const relatedAppointments = await CalendarAppointment.find({ bookingId });
-        const relatedAppointmentIds = relatedAppointments.map(appt => appt._id);
+        const relatedAppointments = await CalendarAppointment.find({
+          bookingId,
+        });
+        const relatedAppointmentIds = relatedAppointments.map(
+          (appt) => appt._id
+        );
         const paymentsAgg = await Payment.aggregate([
-          { $match: { appointmentId: { $in: relatedAppointmentIds }, isDeleted: false } },
+          {
+            $match: {
+              appointmentId: { $in: relatedAppointmentIds },
+              isDeleted: false,
+            },
+          },
           { $group: { _id: null, totalPaid: { $sum: "$paymentAmount" } } },
         ]);
         cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
