@@ -9,12 +9,24 @@ const User = require("../models/User");
  */
 exports.getCalendarAppointments = async (req, res) => {
   try {
-    const { doctorId } = req.query;
+    const { doctorId, weekStart } = req.query;
     const customerId = req.user.customerId; // JWT'den
 
     const matchStage = { customerId: new mongoose.Types.ObjectId(customerId) };
     if (doctorId) {
       matchStage.doctorId = new mongoose.Types.ObjectId(doctorId);
+    }
+
+    // Eğer weekStart parametresi varsa, o haftaya ait randevuları getir
+    if (weekStart) {
+      const startDate = new Date(weekStart);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 7);
+      
+      matchStage.appointmentDate = { 
+        $gte: startDate, 
+        $lt: endDate 
+      };
     }
 
     const appointments = await CalendarAppointment.aggregate([
@@ -70,7 +82,7 @@ exports.createCalendarAppointment = async (req, res) => {
         });
     }
 
-    const { doctorId, dayIndex, timeIndex, participants, description, bookingId } =
+    const { doctorId, dayIndex, timeIndex, participants, description, bookingId, appointmentDate } =
       req.body;
     const customerId = req.user.customerId;
 
@@ -91,8 +103,9 @@ exports.createCalendarAppointment = async (req, res) => {
       dayIndex,
       timeIndex,
       participants,
-      description, // Açıklama alanını ekledik
+      description,
       bookingId: finalBookingId,
+      appointmentDate,
     });
 
     await newAppointment.save();
@@ -117,7 +130,7 @@ exports.updateCalendarAppointment = async (req, res) => {
     }
 
     const appointmentId = req.params.id;
-    const { doctorId, dayIndex, timeIndex, participants, description } =
+    const { doctorId, dayIndex, timeIndex, participants, description, appointmentDate } =
       req.body;
     const customerId = req.user.customerId;
 
@@ -136,12 +149,13 @@ exports.updateCalendarAppointment = async (req, res) => {
         });
     }
 
-    // Güncellemeler (bookingId sabit kalır)
+    // Güncellemeler
     appointment.doctorId = doctorId || appointment.doctorId;
     appointment.dayIndex = dayIndex ?? appointment.dayIndex;
     appointment.timeIndex = timeIndex ?? appointment.timeIndex;
     appointment.participants = participants || appointment.participants;
-    appointment.description = description ?? appointment.description; // Açıklamayı güncelle
+    appointment.description = description ?? appointment.description;
+    appointment.appointmentDate = appointmentDate ?? appointment.appointmentDate;
 
     await appointment.save();
     return res.json({ success: true, data: appointment });
