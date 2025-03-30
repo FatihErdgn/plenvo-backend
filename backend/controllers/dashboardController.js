@@ -311,18 +311,24 @@ exports.getDashboardData = async (req, res) => {
         $group: {
           _id: "$paymentMethod",
           amount: {
-            $sum:
-              loggedInRole === "doctor"
-                ? { $multiply: ["$paymentAmount", 0.4] }
-                : "$paymentAmount",
+            $sum: loggedInRole === "doctor" ? { $multiply: ["$paymentAmount", 0.4] } : "$paymentAmount",
           },
+          patientCount: { $addToSet: "$patientId" } // Count unique patients per payment method
         },
       },
       { $sort: { amount: -1 } },
+      {
+        $project: {
+          method: "$_id",
+          amount: 1,
+          patientCount: { $size: "$patientCount" }
+        }
+      }
     ]);
     const incomeMethods = incomeBreakdownAgg.map((doc) => ({
-      method: doc._id,
+      method: doc.method,
       amount: doc.amount,
+      patientCount: doc.patientCount
     }));
 
     // Gider Breakdown: eğer doctor veya doktor filtresi varsa boş, aksi halde normal aggregation
