@@ -74,43 +74,29 @@ cron.schedule("0 0 1 * *", async () => {
       );
 
       for (const doctor of doctorsWithoutSalary) {
-        // İlgili doctor'un geçen ay aldığı randevuların sayısı
-        const appointmentCount = await Appointment.countDocuments({
-          doctorId: doctor._id,
-          isDeleted: false,
-          datetime: { $gte: firstDayPrevMonth, $lte: lastDayPrevMonth },
-        });
-
-        // Aynı dönemde, Payment koleksiyonunda "Muayene" hizmeti için yapılan ödemeler
+        // Geçen ay içindeki tüm ödemeleri getir (sadece hizmet tipine göre filtre yapmadan)
         const payments = await Payment.find({
           userId: doctor._id,
-          serviceDescription: { $in: ["Muayene", "Seans"] },
           isDeleted: false,
+          paymentStatus: { $in: ["Tamamlandı", "Ödeme Bekleniyor"] },
           paymentDate: { $gte: firstDayPrevMonth, $lte: lastDayPrevMonth },
         });
 
-        let totalServiceFee = 0;
+        // Toplam geliri hesapla
+        let totalIncome = 0;
         payments.forEach((payment) => {
-          totalServiceFee += payment.serviceFee;
+          totalIncome += payment.paymentAmount;
         });
-        let avgServiceFee =
-          payments.length > 0 ? totalServiceFee / payments.length : 0;
 
-        // Hesaplama: randevu sayısı * ortalama muayene ücreti * %40
-        let calculatedSalary = appointmentCount * avgServiceFee * 0.4;
+        // Dashboard ile aynı şekilde hesapla: toplam gelirin %40'ı
+        let calculatedSalary = totalIncome * 0.4;
 
         const expenseData = {
           customerId: doctor.customerId,
           clinicId: doctor.clinicId,
           currencyId: foundCurrency ? foundCurrency._id : null,
           expenseCategory: "Maaş",
-          expenseDescription: `Aylık maaş ödemesi (otomatik hesaplama): ${
-            doctor.firstName
-          } ${
-            doctor.lastName
-          } - Randevu: ${appointmentCount}, Ortalama Ücret: ${avgServiceFee.toFixed(
-            2
-          )}`,
+          expenseDescription: `Aylık maaş ödemesi (otomatik hesaplama): ${doctor.firstName} ${doctor.lastName} - Toplam Gelir: ${totalIncome.toFixed(2)} TL`,
           expenseKind: "Sabit",
           expenseAmount: calculatedSalary,
           expenseDate: new Date(),
