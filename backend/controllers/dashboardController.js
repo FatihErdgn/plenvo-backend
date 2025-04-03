@@ -140,6 +140,7 @@ exports.getDashboardData = async (req, res) => {
     let calendarPatientMatch = {
       customerId,
       bookingId: { $exists: true },
+      appointmentDate: { $gte: start, $lte: end },
     };
 
     if (loggedInRole === "doctor") {
