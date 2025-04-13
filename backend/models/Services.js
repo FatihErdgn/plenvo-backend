@@ -26,6 +26,11 @@ const servicesSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    serviceType: {
+      type: String,
+      enum: ["Ön Görüşme", "Rutin Görüşme", "Muayene", "Diğer"],
+      required: true,
+    },
     provider: {
       type: String,
       required: true,

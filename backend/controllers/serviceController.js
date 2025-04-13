@@ -22,6 +22,7 @@ exports.createService = async (req, res) => {
       provider,
       validityDate,
       serviceFee,
+      serviceType,
       currencyName,
       status,
     } = req.body;
@@ -32,7 +33,8 @@ exports.createService = async (req, res) => {
       !provider ||
       !validityDate ||
       !serviceFee ||
-      !currencyName
+      !currencyName ||
+      !serviceType
     ) {
       return res.status(400).json({
         success: false,
@@ -57,6 +59,12 @@ exports.createService = async (req, res) => {
       });
     }
 
+    if (!serviceType) {
+      return res.status(400).json({
+        success: false,
+        message: "Service type is required.",
+      });
+    }
     // Token üzerinden alınan bilgiler (authentication middleware req.user'ı doldurmalı)
     const customerId = req.user.customerId;
     const clinicId = req.user.clinicId;
@@ -71,6 +79,7 @@ exports.createService = async (req, res) => {
       serviceName,
       provider,
       validityDate: parsedValidityDate,
+      serviceType,
       serviceFee,
       status: status || "active",
       isDeleted: false,
