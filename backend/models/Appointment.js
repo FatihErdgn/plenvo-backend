@@ -47,6 +47,14 @@ const appointmentSchema = new mongoose.Schema({
     enum: ["single", "group"], // İsterseniz enum kullanabilirsiniz
   },
 
+  // Randevu tipi alanı, seçenekler "Ön Görüşme" veya "Muayene"
+  appointmentType: {
+    type: String,
+    required: true,
+    enum: ["Ön Görüşme", "Muayene"],
+    default: "Muayene",
+  },
+
   clientFirstName: { type: String },
   clientLastName: { type: String },
   phoneNumber: { type: String },

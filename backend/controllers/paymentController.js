@@ -9,8 +9,8 @@ const mongoose = require("mongoose");
 /**
  * createPayment: Bir randevu için ödeme oluşturur.
  * İstenen alanlar:
- *  - currencyId (frontend’den gönderilen para birimi ID’si)
- *  - serviceIds: Seçilen hizmetlerin ID’leri (array)
+ *  - currencyId (frontend'den gönderilen para birimi ID'si)
+ *  - serviceIds: Seçilen hizmetlerin ID'leri (array)
  *  - paymentMethod, paymentAmount, paymentDescription
  *  - appointmentId: Hangi randevu için ödeme yapılıyor
  *
@@ -41,12 +41,19 @@ exports.createPayment = async (req, res) => {
       !currencyName ||
       !serviceIds ||
       !paymentMethod ||
-      !paymentAmount ||
       !appointmentId
     ) {
       return res.status(400).json({
         success: false,
         message: "Gerekli tüm ödeme alanları doldurulmalıdır.",
+      });
+    }
+
+    // paymentAmount alanı için özel kontrol
+    if (paymentAmount === undefined || paymentAmount === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Ödeme tutarı belirtilmelidir.",
       });
     }
 
@@ -57,7 +64,7 @@ exports.createPayment = async (req, res) => {
         .json({ success: false, message: "Müşteri kimliği bulunamadı." });
     }
 
-    // Randevuyu önce Appointment, bulunamazsa CalendarAppointment’dan çekiyoruz.
+    // Randevuyu önce Appointment, bulunamazsa CalendarAppointment'dan çekiyoruz.
     let appointment = await Appointment.findById(appointmentId);
     let isCalendar = false;
     if (!appointment) {
@@ -71,23 +78,46 @@ exports.createPayment = async (req, res) => {
     }
     const userId = appointment.doctorId;
 
+    // Randevunun "Ön Görüşme" özel durumu için kontrol
+    const isOnGorusme = appointment.appointmentType === "Ön Görüşme";
+
     // Seçilen hizmetlerin detaylarını getiriyoruz.
-    const services = await Services.find({
-      _id: { $in: serviceIds.map((id) => new mongoose.Types.ObjectId(id)) },
-      isDeleted: false,
-      status: "Aktif",
-    });
-    if (services.length === 0) {
+    let services = [];
+    let totalServiceFee = 0;
+    let serviceDescriptions = [];
+
+    // Eğer serviceIds varsa ve boş değilse hizmetleri getir
+    if (serviceIds && serviceIds.length > 0) {
+      services = await Services.find({
+        _id: { $in: serviceIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        isDeleted: false,
+        status: "Aktif",
+      });
+      
+      // Normal durum için kontrol: "Ön Görüşme" değilse ve hizmet bulunamadıysa hata döndür
+      if (services.length === 0 && !isOnGorusme) {
+        return res.status(400).json({
+          success: false,
+          message: "Seçilen hizmetler bulunamadı veya aktif değil.",
+        });
+      }
+      
+      totalServiceFee = services.reduce((sum, svc) => sum + svc.serviceFee, 0);
+      serviceDescriptions = services.map((svc) => svc.serviceName);
+    } else if (!isOnGorusme) {
+      // "Ön Görüşme" değilse ve serviceIds yoksa hata döndür
       return res.status(400).json({
         success: false,
-        message: "Seçilen hizmetler bulunamadı veya aktif değil.",
+        message: "Hizmet seçilmelidir.",
       });
     }
-    const totalServiceFee = services.reduce(
-      (sum, svc) => sum + svc.serviceFee,
-      0
-    );
-    const serviceDescriptions = services.map((svc) => svc.serviceName);
+    
+    // "Ön Görüşme" için özel durum: Hizmet yoksa bile devam et, ücret 0 TL
+    if (isOnGorusme && services.length === 0) {
+      totalServiceFee = 0;
+      serviceDescriptions = ["Ön Görüşme Hizmeti"];
+    }
+
     const paymentDateFinal = paymentDate ? new Date(paymentDate) : new Date();
 
     const foundCurrency = await Currency.findOne({ currencyName });
@@ -97,17 +127,21 @@ exports.createPayment = async (req, res) => {
         .json({ success: false, message: "Para birimi bulunamadı." });
     }
 
+    // Ödeme durumunu belirle - "Ön Görüşme" için özel durum: 0 TL ödemede bile "Tamamlandı" kabul edilebilir
+    const paymentStatus = isOnGorusme || paymentAmount >= totalServiceFee 
+      ? "Tamamlandı" 
+      : "Ödeme Bekleniyor";
+
     const newPayment = new Payment({
       customerId,
       currencyId: foundCurrency._id,
       userId,
-      serviceId: serviceIds,
+      serviceId: serviceIds && serviceIds.length > 0 ? serviceIds : [],
       appointmentId,
       paymentMethod,
       paymentAmount,
       paymentDate: paymentDateFinal,
-      paymentStatus:
-        paymentAmount >= totalServiceFee ? "Tamamlandı" : "Ödeme Bekleniyor",
+      paymentStatus: paymentStatus,
       paymentDescription,
       serviceFee: totalServiceFee,
       serviceDescription: serviceDescriptions.join(", "),
@@ -117,9 +151,9 @@ exports.createPayment = async (req, res) => {
     const savedPayment = await newPayment.save();
 
     // Randevu durumunu güncelle:
-    if (paymentAmount >= totalServiceFee) {
+    if (isOnGorusme || paymentAmount >= totalServiceFee) {
       if (isCalendar) {
-        // Aynı bookingId’ye sahip tüm CalendarAppointment’ları güncelle
+        // Aynı bookingId'ye sahip tüm CalendarAppointment'ları güncelle
         await CalendarAppointment.updateMany(
           { bookingId: appointment.bookingId },
           {
@@ -213,6 +247,8 @@ exports.updatePayment = async (req, res) => {
     }
     if (appointment) {
       let cumulativePaid, totalServiceFee;
+      const isOnGorusme = appointment.appointmentType === "Ön Görüşme";
+      
       if (isCalendar) {
         const bookingId = appointment.bookingId;
         const relatedAppointments = await CalendarAppointment.find({
@@ -233,7 +269,9 @@ exports.updatePayment = async (req, res) => {
         cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
         totalServiceFee = updatedPayment.serviceFee;
         let newStatus, newActions;
-        if (cumulativePaid >= totalServiceFee) {
+        
+        // "Ön Görüşme" için özel durum: 0 TL ödemede bile "Tamamlandı" kabul edilebilir
+        if (isOnGorusme || cumulativePaid >= totalServiceFee) {
           newStatus = "Tamamlandı";
           newActions = {
             payNow: false,
@@ -261,7 +299,9 @@ exports.updatePayment = async (req, res) => {
         ]);
         cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
         totalServiceFee = updatedPayment.serviceFee;
-        if (cumulativePaid >= totalServiceFee) {
+        
+        // "Ön Görüşme" için özel durum: 0 TL ödemede bile "Tamamlandı" kabul edilebilir
+        if (isOnGorusme || cumulativePaid >= totalServiceFee) {
           appointment.status = "Tamamlandı";
           appointment.actions = {
             payNow: false,
@@ -321,7 +361,7 @@ exports.getPaymentsByAppointment = async (req, res) => {
 
     let payments;
     if (isCalendar) {
-      // Aynı bookingId’ye sahip tüm CalendarAppointment’ların _id’lerini alıyoruz.
+      // Aynı bookingId'ye sahip tüm CalendarAppointment'ların _id'lerini alıyoruz.
       const bookingId = appointment.bookingId;
       const relatedAppointments = await CalendarAppointment.find({ bookingId });
       const relatedAppointmentIds = relatedAppointments.map((appt) => appt._id);
@@ -379,6 +419,8 @@ exports.softDeletePayment = async (req, res) => {
     }
     if (appointment) {
       let cumulativePaid, totalServiceFee;
+      const isOnGorusme = appointment.appointmentType === "Ön Görüşme";
+      
       if (isCalendar) {
         const bookingId = appointment.bookingId;
         const relatedAppointments = await CalendarAppointment.find({
@@ -399,7 +441,9 @@ exports.softDeletePayment = async (req, res) => {
         cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
         totalServiceFee = updatedPayment.serviceFee;
         let newStatus, newActions;
-        if (cumulativePaid >= totalServiceFee) {
+        
+        // "Ön Görüşme" için özel durum: 0 TL ödemede bile "Tamamlandı" kabul edilebilir
+        if (isOnGorusme || cumulativePaid >= totalServiceFee) {
           newStatus = "Tamamlandı";
           newActions = {
             payNow: false,
@@ -427,7 +471,9 @@ exports.softDeletePayment = async (req, res) => {
         ]);
         cumulativePaid = paymentsAgg[0]?.totalPaid || 0;
         totalServiceFee = updatedPayment.serviceFee;
-        if (cumulativePaid >= totalServiceFee) {
+        
+        // "Ön Görüşme" için özel durum: 0 TL ödemede bile "Tamamlandı" kabul edilebilir
+        if (isOnGorusme || cumulativePaid >= totalServiceFee) {
           appointment.status = "Tamamlandı";
           appointment.actions = {
             payNow: false,

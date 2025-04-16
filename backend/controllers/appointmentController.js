@@ -21,6 +21,7 @@ exports.createAppointment = async (req, res) => {
       type,
       participants,
       statusComment,
+      appointmentType,
     } = req.body;
 
     // Randevu tipi kontrolü
@@ -29,6 +30,17 @@ exports.createAppointment = async (req, res) => {
         success: false,
         message: "Randevu tipi belirtilmelidir.",
       });
+    }
+
+    // Randevu tipi (appointmentType) kontrolü
+    if (appointmentType) {
+      const validTypes = ["Ön Görüşme", "Muayene"];
+      if (!validTypes.includes(appointmentType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Geçersiz randevu tipi. 'Ön Görüşme' veya 'Muayene' olmalıdır.",
+        });
+      }
     }
 
     // Grup randevusu için gerekli alanlar
@@ -160,6 +172,7 @@ exports.createAppointment = async (req, res) => {
       paymentId,
       doctorId,
       type,
+      appointmentType,
       clientFirstName,
       clientLastName,
       phoneNumber,
@@ -251,6 +264,17 @@ exports.updateAppointment = async (req, res) => {
     }
     const appointmentId = req.params.id;
     const updateData = { ...req.body };
+
+    // Appointment type validasyonu
+    if (updateData.appointmentType) {
+      const validTypes = ["Ön Görüşme", "Muayene"];
+      if (!validTypes.includes(updateData.appointmentType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Geçersiz randevu tipi. 'Ön Görüşme' veya 'Muayene' olmalıdır.",
+        });
+      }
+    }
 
     // Zorunlu alanlarda validasyon yapabilirsiniz
     if (updateData.datetime) {
