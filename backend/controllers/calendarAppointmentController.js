@@ -4,6 +4,18 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 
 /**
+ * Türkiye telefon numarası formatını kontrol eden yardımcı fonksiyon
+ * 0 ile başlayan 10-11 haneli numara (05xx xxx xx xx formatı)
+ */
+const validateTurkishPhoneNumber = (phone) => {
+  if (!phone) return true; // Boş numara kabul edilebilir
+  
+  // 0 ile başlayan 10-11 haneli numara kontrolü
+  const regex = /^0[5][0-9]{8,9}$/;
+  return regex.test(phone);
+};
+
+/**
  * GET /pilates-schedule?doctorId=...
  * Belirli doktora (veya hepsine) ait randevuları getirir.
  */
@@ -66,7 +78,26 @@ exports.getCalendarAppointments = async (req, res) => {
         { $project: { doctor: 0 } }, // Gereksiz doctor dizisini kaldır
       ]);
 
-      appointments = [...dbAppointments];
+      // Veritabanından gelen randevularda katılımcı ve telefon numaralarını birleştir
+      const processedAppointments = dbAppointments.map(appt => {
+        // Katılımcı telefon numaralarını katılımcı objelerine ekle
+        const participants = appt.participants.map((participant, index) => {
+          return {
+            name: participant.name,
+            phone: appt.participantsTelNumbers && appt.participantsTelNumbers[index] 
+              ? appt.participantsTelNumbers[index]
+              : ""
+          };
+        });
+        
+        // Güncellenmiş katılımcı listesini randevuya ekle
+        return {
+          ...appt,
+          participants
+        };
+      });
+
+      appointments = [...processedAppointments];
 
       // Şimdi tekrarlı randevuları kontrol et - bu tarih için tekrarlanan ancak veritabanında olmayan randevular
       // Tekrarlı randevuları almak için ek sorgu yap
@@ -120,12 +151,23 @@ exports.getCalendarAppointments = async (req, res) => {
             const doctor = await User.findById(appt.doctorId);
             const doctorName = doctor ? `${doctor.firstName} ${doctor.lastName}` : "Unknown";
             
+            // Katılımcı telefon numaralarını katılımcı objelerine ekle
+            const participants = appt.participants.map((participant, index) => {
+              return {
+                name: participant.name,
+                phone: appt.participantsTelNumbers && appt.participantsTelNumbers[index] 
+                  ? appt.participantsTelNumbers[index]
+                  : ""
+              };
+            });
+            
             // Bu haftaki instance'ı oluştur
             appointments.push({
               ...appt.toObject(),
               _id: appt._id.toString() + "_instance_" + appointmentDate.toISOString().split('T')[0],
               appointmentDate: appointmentDate,
               doctorName: doctorName, // Doktor adını ekle
+              participants: participants, // Telefon numarasını içeren katılımcı listesi
               recurringParentType: appt.appointmentType, // Randevu tipini parent'tan al
               isVirtualInstance: true // Bu özellik, frontend'de bu randevunun gerçekte veritabanında olmadığını gösterecek
             });
@@ -165,7 +207,7 @@ exports.createCalendarAppointment = async (req, res) => {
       doctorId, 
       dayIndex, 
       timeIndex, 
-      participants, 
+      participants,
       description, 
       bookingId, 
       appointmentDate,
@@ -189,6 +231,20 @@ exports.createCalendarAppointment = async (req, res) => {
         .status(400)
         .json({ success: false, message: "En az bir katılımcı ekleyin ve tüm katılımcıların adını girin." });
     }
+    
+    // Telefon numarası validasyonu
+    const invalidPhoneNumbers = participants.filter(p => p.phone && !validateTurkishPhoneNumber(p.phone));
+    if (invalidPhoneNumbers.length > 0) {
+      return res
+        .status(400)
+        .json({ 
+          success: false, 
+          message: "Telefon numaraları 0 ile başlamalı ve 05XX XXX XX XX formatında olmalıdır." 
+        });
+    }
+
+    // Participants'dan phone değerlerini al ve participantsTelNumbers dizisine kaydet
+    const participantsTelNumbers = participants.map(p => p.phone || "");
 
     // Eğer front-end bookingId göndermediyse yeni oluştur.
     const finalBookingId = bookingId || new mongoose.Types.ObjectId().toString();
@@ -199,7 +255,8 @@ exports.createCalendarAppointment = async (req, res) => {
       doctorId,
       dayIndex,
       timeIndex,
-      participants,
+      participants: participants.map(p => ({ name: p.name })), // Sadece name alanını al
+      participantsTelNumbers, // Telefon numaralarını ayrı dizide kaydet
       description,
       bookingId: finalBookingId,
       appointmentDate,
@@ -244,6 +301,24 @@ exports.updateCalendarAppointment = async (req, res) => {
     } = req.body;
     
     const customerId = req.user.customerId;
+    
+    // Telefon numarası validasyonu (eğer participants varsa)
+    if (participants) {
+      const invalidPhoneNumbers = participants.filter(p => p.phone && !validateTurkishPhoneNumber(p.phone));
+      if (invalidPhoneNumbers.length > 0) {
+        return res
+          .status(400)
+          .json({ 
+            success: false, 
+            message: "Telefon numaraları 0 ile başlamalı ve 05XX XXX XX XX formatında olmalıdır." 
+          });
+      }
+    }
+    
+    // Telefon numaralarını katılımcılardan çıkar
+    const participantsTelNumbers = participants ? participants.map(p => p.phone || "") : null;
+    // Sadece isim bilgisini içeren katılımcı listesi oluştur
+    const participantsWithoutPhone = participants ? participants.map(p => ({ name: p.name })) : null;
 
     // Sanal instance mi kontrol et
     if (appointmentId.includes("_instance_")) {
@@ -268,7 +343,8 @@ exports.updateCalendarAppointment = async (req, res) => {
         parentAppointment.doctorId = doctorId || parentAppointment.doctorId;
         parentAppointment.dayIndex = dayIndex ?? parentAppointment.dayIndex;
         parentAppointment.timeIndex = timeIndex ?? parentAppointment.timeIndex;
-        parentAppointment.participants = participants || parentAppointment.participants;
+        parentAppointment.participants = participantsWithoutPhone || parentAppointment.participants;
+        parentAppointment.participantsTelNumbers = participantsTelNumbers || parentAppointment.participantsTelNumbers;
         parentAppointment.description = description ?? parentAppointment.description;
         parentAppointment.isRecurring = isRecurring ?? parentAppointment.isRecurring;
         parentAppointment.endDate = endDate ? new Date(endDate) : parentAppointment.endDate;
@@ -293,7 +369,8 @@ exports.updateCalendarAppointment = async (req, res) => {
           doctorId: doctorId || parentAppointment.doctorId,
           dayIndex: dayIndex ?? parentAppointment.dayIndex,
           timeIndex: timeIndex ?? parentAppointment.timeIndex,
-          participants: participants || parentAppointment.participants,
+          participants: participantsWithoutPhone || parentAppointment.participants,
+          participantsTelNumbers: participantsTelNumbers || parentAppointment.participantsTelNumbers,
           description: description ?? parentAppointment.description,
           bookingId: parentAppointment.bookingId,
           appointmentDate: exceptionDate,
@@ -323,7 +400,8 @@ exports.updateCalendarAppointment = async (req, res) => {
       appointment.doctorId = doctorId || appointment.doctorId;
       appointment.dayIndex = dayIndex ?? appointment.dayIndex;
       appointment.timeIndex = timeIndex ?? appointment.timeIndex;
-      appointment.participants = participants || appointment.participants;
+      appointment.participants = participantsWithoutPhone || appointment.participants;
+      appointment.participantsTelNumbers = participantsTelNumbers || appointment.participantsTelNumbers;
       appointment.description = description ?? appointment.description;
       appointment.appointmentDate = appointmentDate ?? appointment.appointmentDate;
       appointment.isRecurring = isRecurring ?? appointment.isRecurring;

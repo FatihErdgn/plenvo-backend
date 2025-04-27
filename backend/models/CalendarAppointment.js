@@ -31,6 +31,11 @@ const calendarAppointmentSchema = new Schema(
         name: String,
       },
     ],
+    participantsTelNumbers: [
+      {
+        type: String,
+      },
+    ],
     description: {
       type: String,
       default: "",
