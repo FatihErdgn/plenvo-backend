@@ -78,12 +78,15 @@ exports.createPayment = async (req, res) => {
     }
     const userId = appointment.doctorId;
 
+    // Randevunun "Ön Görüşme" özel durumu için kontrol
+    const isOnGorusme = appointment.appointmentType === "Ön Görüşme";
+
     // Seçilen hizmetlerin detaylarını getiriyoruz.
     let services = [];
     let totalServiceFee = 0;
     let serviceDescriptions = [];
 
-    // Hizmetleri getir
+    // Eğer serviceIds varsa ve boş değilse hizmetleri getir
     if (serviceIds && serviceIds.length > 0) {
       services = await Services.find({
         _id: { $in: serviceIds.map((id) => new mongoose.Types.ObjectId(id)) },
@@ -91,7 +94,8 @@ exports.createPayment = async (req, res) => {
         status: "Aktif",
       });
       
-      if (services.length === 0) {
+      // Normal durum için kontrol: "Ön Görüşme" değilse ve hizmet bulunamadıysa hata döndür
+      if (services.length === 0 && !isOnGorusme) {
         return res.status(400).json({
           success: false,
           message: "Seçilen hizmetler bulunamadı veya aktif değil.",
@@ -100,11 +104,18 @@ exports.createPayment = async (req, res) => {
       
       totalServiceFee = services.reduce((sum, svc) => sum + svc.serviceFee, 0);
       serviceDescriptions = services.map((svc) => svc.serviceName);
-    } else {
+    } else if (!isOnGorusme) {
+      // "Ön Görüşme" değilse ve serviceIds yoksa hata döndür
       return res.status(400).json({
         success: false,
         message: "Hizmet seçilmelidir.",
       });
+    }
+    
+    // "Ön Görüşme" için özel durum: Hizmet yoksa bile devam et, ücret 0 TL
+    if (isOnGorusme && services.length === 0) {
+      totalServiceFee = 0;
+      serviceDescriptions = ["Ön Görüşme Hizmeti"];
     }
 
     const paymentDateFinal = paymentDate ? new Date(paymentDate) : new Date();
@@ -116,7 +127,7 @@ exports.createPayment = async (req, res) => {
         .json({ success: false, message: "Para birimi bulunamadı." });
     }
 
-    // Ödeme durumunu belirle
+    // Ödeme durumunu belirle - sadece ödeme miktarına bağlı olarak
     const paymentStatus = paymentAmount >= totalServiceFee 
       ? "Tamamlandı" 
       : "Ödeme Bekleniyor";
