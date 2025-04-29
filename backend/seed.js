@@ -71,12 +71,13 @@ async function seedSuperadmin() {
     let customer = await Customer.findOne({ customerDomain: subdomain });
     if (!customer) {
       customer = new Customer({
-        customerName: `${subdomain.charAt(0).toUpperCase() + subdomain.slice(1)} Müşteri`,
+        customerName: `${subdomain.charAt(0).toUpperCase() + subdomain.slice(1)}`,
         countryId: null,
         customerDomain: subdomain,
         appMainColor: "#123456",
         appSecondaryColor: "#abcdef",
         customerType: "business",
+        smsApiKey: "w25EOLfYCDLqxMFy",
       });
       await customer.save();
       console.log(`Yeni müşteri oluşturuldu: ${subdomain}`);
