@@ -2,6 +2,7 @@
 const CalendarAppointment = require("../models/CalendarAppointment");
 const mongoose = require("mongoose");
 const User = require("../models/User");
+const { sendCalendarAppointmentImmediateReminder } = require('./appointmentReminderController');
 
 /**
  * Türkiye telefon numarası formatını kontrol eden yardımcı fonksiyon
@@ -266,6 +267,15 @@ exports.createCalendarAppointment = async (req, res) => {
     });
 
     await newAppointment.save();
+    
+    // Randevu oluşturulduğunda WhatsApp üzerinden anında hatırlatma gönder
+    try {
+      await sendCalendarAppointmentImmediateReminder(newAppointment._id);
+    } catch (error) {
+      console.error("WhatsApp hatırlatma gönderme hatası:", error);
+      // Hatırlatma gönderilemese bile randevu oluşturuldu, devam et
+    }
+    
     return res.json({ success: true, data: newAppointment });
   } catch (err) {
     console.error("createCalendarAppointment error:", err);

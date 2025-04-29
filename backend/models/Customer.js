@@ -16,6 +16,8 @@ const customerSchema = new mongoose.Schema({
   smsApiKey: { type: String }, // SMS için gerekli API anahtarı
   smsSenderId: { type: String }, // SMS gönderici adı
   isDeleted: { type: Boolean, default: false }, // Soft delete alanı
+  pullSmsApiKey: { type: String }, // PullSMS API anahtarı
+  sentMessageCount: { type: Number, default: 0 } // Gönderilen mesaj sayısı
 });
 
 module.exports = mongoose.model("Customer", customerSchema);

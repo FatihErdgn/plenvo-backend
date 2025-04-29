@@ -71,6 +71,10 @@ const calendarAppointmentSchema = new Schema(
     recurringExceptions: {
       type: [Date], // İptal edilen veya değiştirilen tekrarlı randevu tarihleri
       default: [],
+    },
+    reminderSent: {
+      type: Boolean,
+      default: false // WhatsApp hatırlatma gönderildi mi
     }
   },
   { timestamps: true }

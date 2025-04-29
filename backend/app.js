@@ -11,9 +11,10 @@ const errorHandler = require("./middlewares/errorHandler");
 const apiLimiter = require("./middlewares/rateLimiter");
 const morgan = require("morgan");
 
-require("./jobs/reminderJob");
+// require("./jobs/reminderJob");
 require("./jobs/updateAppointmentStatus");
 require('./jobs/salaryExpensesJob'); // Yeni eklenen cron job dosyası
+require('./jobs/appointmentReminderJob'); // WhatsApp randevu hatırlatma görevi
 
 // Express App Başlat
 const app = express();
@@ -59,7 +60,7 @@ app.get("/", (req, res) => {
   res.send("✅ Hospital Appointment System API is running...");
 });
 
-// **ÖNEMLİ: MongoDB Bağlantısı Tamamlanmadan Express Route’lar Yüklenmesin!**
+// **ÖNEMLİ: MongoDB Bağlantısı Tamamlanmadan Express Route'lar Yüklenmesin!**
 connectDB().then(async () => {
   try {
     await require("./seed")();
@@ -80,8 +81,8 @@ connectDB().then(async () => {
     app.use("/api/currencies", require("./routes/currencyRoutes"));
     app.use("/api/calendar-appointments", require("./routes/calendarAppointmentRoutes"));
 
-    // **Tüm route’ları konsola yazdıralım**
-    console.log("✅ Yüklenen Route’lar:");
+    // **Tüm route'ları konsola yazdıralım**
+    console.log("✅ Yüklenen Route'lar:");
     app._router.stack.forEach((r) => {
       if (r.route && r.route.path) {
         console.log(`🔹 Route: ${r.route.path}`);

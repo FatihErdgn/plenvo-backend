@@ -81,6 +81,7 @@ const appointmentSchema = new mongoose.Schema({
   lastEditDate: { type: Date },
   smsImmediateSent: { type: Boolean, default: false },
   smsReminderSent: { type: Boolean, default: false },
+  reminderSent: { type: Boolean, default: false }, // WhatsApp hatırlatma gönderildi mi
   createdAt: { type: Date, default: Date.now },
 });
 

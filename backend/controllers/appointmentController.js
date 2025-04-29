@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Clinic = require("../models/Clinic");
 const Payment = require("../models/Payment");
 const generateUniqueAppointmentCode = require("../utils/uniqueAppointmentCode");
+const { sendAppointmentImmediateReminder } = require('./appointmentReminderController');
 
 // createAppointment: Randevu oluşturma
 exports.createAppointment = async (req, res) => {
@@ -188,6 +189,15 @@ exports.createAppointment = async (req, res) => {
     });
 
     const savedAppointment = await newAppointment.save();
+    
+    // Randevu oluşturulduğunda WhatsApp üzerinden anında hatırlatma gönder
+    try {
+      await sendAppointmentImmediateReminder(savedAppointment._id);
+    } catch (error) {
+      console.error("WhatsApp hatırlatma gönderme hatası:", error);
+      // Hatırlatma gönderilemese bile randevu oluşturuldu, devam et
+    }
+    
     return res.status(201).json({
       success: true,
       appointment: savedAppointment,
