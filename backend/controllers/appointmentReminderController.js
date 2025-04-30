@@ -116,14 +116,14 @@ async function sendCalendarAppointmentImmediateReminder(appointmentId) {
     const customerName = appointment.customerId?.customerName || '';
     
     // Katılımcı isimleri
-    let participantNames = 'Sayın Hasta';
+    let participantNames = 'Sayın';
     if (appointment.participants && appointment.participants.length > 0) {
       participantNames = appointment.participants.map(p => p.name).join(', ');
     }
     
     const message = `Sayın ${participantNames}, 
-${dateStr} tarihinde ${doctorName} ile ${customerName}'de randevunuz oluşturulmuştur. 
-Randevunuzu hatırlatırız.`;
+${dateStr} tarihinde ${doctorName} ile ${customerName} için randevunuz oluşturulmuştur. 
+Randevunuzu hatırlatır, iyi günler dileriz.`;
     
     // WhatsApp üzerinden mesaj gönder
     const result = await sendWhatsAppMessage(

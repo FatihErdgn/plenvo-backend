@@ -30,13 +30,13 @@ async function sendAppointmentReminders() {
  * Appointment modeli için hatırlatma mesajları
  */
 async function processAppointmentReminders() {
-  // 24 saat içinde gerçekleşecek ve henüz hatırlatma gönderilmemiş randevuları bul
+  // Sadece gelecek 24 saat içindeki ve henüz hatırlatma gönderilmemiş randevuları bul
   const now = moment();
   const tomorrow = moment().add(24, 'hours');
   
   const appointments = await Appointment.find({
     datetime: { $gt: now.toDate(), $lt: tomorrow.toDate() },
-    reminderSent: { $ne: true },  // Sadece reminderSent=false olan randevulara mesaj gönder
+    reminderSent: { $ne: true },
     isDeleted: { $ne: true }
   }).populate('customerId').populate('doctorId').populate('clinicId');
   
@@ -44,6 +44,14 @@ async function processAppointmentReminders() {
   
   for (const appointment of appointments) {
     try {
+      // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et
+      if (moment(appointment.datetime).isBefore(moment())) {
+        console.log(`Appointment ${appointment._id} geçmiş tarihli, hatırlatma gönderilmeyecek`);
+        // Geçmiş randevuyu işaretleyelim ki tekrar tekrar sorgulanmasın
+        await Appointment.findByIdAndUpdate(appointment._id, { reminderSent: true });
+        continue;
+      }
+      
       await sendReminderForAppointment(appointment);
     } catch (err) {
       console.error(`Appointment ${appointment._id} hatırlatma hatası:`, err);
@@ -55,7 +63,7 @@ async function processAppointmentReminders() {
  * CalendarAppointment modeli için hatırlatma mesajları
  */
 async function processCalendarAppointmentReminders() {
-  // 24 saat içinde gerçekleşecek ve henüz hatırlatma gönderilmemiş randevuları bul
+  // Sadece gelecek 24 saat içindeki ve henüz hatırlatma gönderilmemiş randevuları bul
   const now = moment();
   const tomorrow = moment().add(24, 'hours');
   
@@ -68,6 +76,14 @@ async function processCalendarAppointmentReminders() {
   
   for (const appointment of calendarAppointments) {
     try {
+      // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et
+      if (moment(appointment.appointmentDate).isBefore(moment())) {
+        console.log(`CalendarAppointment ${appointment._id} geçmiş tarihli, hatırlatma gönderilmeyecek`);
+        // Geçmiş randevuyu işaretleyelim ki tekrar tekrar sorgulanmasın
+        await CalendarAppointment.findByIdAndUpdate(appointment._id, { reminderSent: true });
+        continue;
+      }
+      
       await sendReminderForCalendarAppointment(appointment);
     } catch (err) {
       console.error(`CalendarAppointment ${appointment._id} hatırlatma hatası:`, err);
@@ -103,7 +119,7 @@ async function sendReminderForAppointment(appointment) {
   
   const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName}, 
 ${dateStr} tarihinde ${doctorName} ile ${customerName} ${clinicName} bölümünde randevunuz bulunmaktadır. 
-Randevunuzu hatırlatırız.`;
+Randevunuzu hatırlatır, iyi günler dileriz.`;
   
   // WhatsApp üzerinden mesaj gönder
   const result = await sendWhatsAppMessage(
@@ -165,8 +181,8 @@ async function sendReminderForCalendarAppointment(appointment) {
   }
   
   const message = `Sayın ${participantNames}, 
-${dateStr} tarihinde ${doctorName} ile ${customerName}'de randevunuz bulunmaktadır. 
-Randevunuzu hatırlatırız.`;
+${dateStr} tarihinde ${doctorName} ile ${customerName} için randevunuz bulunmaktadır. 
+Randevunuzu hatırlatır, iyi günler dileriz.`;
   
   // WhatsApp üzerinden mesaj gönder
   const result = await sendWhatsAppMessage(
@@ -192,9 +208,43 @@ Randevunuzu hatırlatırız.`;
   }
 }
 
-// Cron görevi - Her gün saat 9'da çalışır
+// Tekrar kontrol ihtiyacını azaltmak için geçmiş randevuları otomatik işaretle
+async function markPastAppointments() {
+  const now = moment();
+  
+  // Geçmiş randevuları hatırlatma gönderildi olarak işaretle
+  await Appointment.updateMany(
+    { 
+      datetime: { $lt: now.toDate() }, 
+      reminderSent: { $ne: true },
+      isDeleted: { $ne: true }
+    },
+    { 
+      reminderSent: true 
+    }
+  );
+  
+  await CalendarAppointment.updateMany(
+    { 
+      appointmentDate: { $lt: now.toDate() }, 
+      reminderSent: { $ne: true } 
+    },
+    { 
+      reminderSent: true 
+    }
+  );
+  
+  console.log('Geçmiş randevular işaretlendi:', new Date().toISOString());
+}
+
+// Ana randevu tarama işlemi öncesinde geçmiş randevuları işaretle 
+// Her gün saat 8:45'te çalışır (ana hatırlatma işinden önce)
+cron.schedule('45 8 * * *', markPastAppointments);
+
+// Ana hatırlatma işi - Her gün saat 9'da çalışır
 cron.schedule('0 9 * * *', sendAppointmentReminders);
 
 module.exports = {
-  sendAppointmentReminders
+  sendAppointmentReminders,
+  markPastAppointments
 }; 
