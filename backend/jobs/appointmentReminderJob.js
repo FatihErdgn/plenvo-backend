@@ -274,11 +274,11 @@ async function markPastAppointments() {
 }
 
 // Ana randevu tarama işlemi öncesinde geçmiş randevuları işaretle
-// Her gün saat 8:45'te çalışır (ana hatırlatma işinden önce)
-cron.schedule("45 8 * * *", markPastAppointments);
+// Her gün saat 14:45'te çalışır (ana hatırlatma işinden önce)
+cron.schedule("45 14 * * *", markPastAppointments);
 
-// Ana hatırlatma işi - Her gün saat 9'da çalışır
-cron.schedule("0 9 * * *", sendAppointmentReminders);
+// Ana hatırlatma işi - Her gün saat 15:00'te çalışır
+cron.schedule("0 15 * * *", sendAppointmentReminders);
 
 module.exports = {
   sendAppointmentReminders,
