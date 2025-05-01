@@ -38,19 +38,15 @@ async function sendAppointmentImmediateReminder(appointmentId) {
     }
 
     // Mesaj içeriğini oluştur
-    const dateStr = moment(appointment.datetime).format("DD.MM.YYYY HH:mm");
+    const dateStr = moment(appointment.datetime).format("DD.MM.YYYY");
+    const timeStr = moment(appointment.datetime).format("HH:mm");
     const doctorName = appointment.doctorId
       ? `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`
       : "uzmanınız";
     const clinicName = appointment.clinicId?.clinicName || "";
     const customerName = appointment.customerId?.customerName || "";
 
-    //     const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName},
-    // ${dateStr} tarihinde ${doctorName} ile ${customerName} ${clinicName} bölümünde randevunuz oluşturulmuştur.
-    // Randevunuzu hatırlatır, iyi günler dileriz.`;
-
-    const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName},
-    ${dateStr} tarihindeki randevunuzu hatırlatır, iyi günler dileriz. ${customerName} Sağlıklı Yaşam Merkezi`;
+    const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.`;
 
     // WhatsApp üzerinden mesaj gönder
     const result = await sendWhatsAppMessage(
@@ -142,9 +138,8 @@ async function sendCalendarAppointmentImmediateReminder(appointmentId) {
     }
 
     // Mesaj içeriğini oluştur
-    const dateStr = moment(appointment.appointmentDate).format(
-      "DD.MM.YYYY HH:mm"
-    );
+    const dateStr = moment(appointment.appointmentDate).format("DD.MM.YYYY");
+    const timeStr = moment(appointment.appointmentDate).format("HH:mm");
     const doctorName = appointment.doctorId
       ? `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`
       : "uzmanınız";
@@ -156,12 +151,7 @@ async function sendCalendarAppointmentImmediateReminder(appointmentId) {
       participantNames = appointment.participants.map((p) => p.name).join(", ");
     }
 
-    //     const message = `Sayın ${participantNames},
-    // ${dateStr} tarihinde ${doctorName} ile ${customerName} için randevunuz oluşturulmuştur.
-    // Randevunuzu hatırlatır, iyi günler dileriz.`;
-
-    const message = `Sayın ${participantNames},
-    ${dateStr} tarihindeki randevunuzu hatırlatır, iyi günler dileriz. ${customerName} Sağlıklı Yaşam Merkezi`;
+    const message = `Sayın ${participantNames}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.`;
 
     // WhatsApp üzerinden mesaj gönder
     const result = await sendWhatsAppMessage(
