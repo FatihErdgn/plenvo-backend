@@ -78,7 +78,11 @@ const sendWhatsAppMessage = async (apiKey, phones, message, webhookId = 5) => {
     
     console.log("PullSMS yanıtı:", response.data);
     
-    if (response.data && response.data.status === 'success') {
+    // Success check - either status is success OR description contains 'başarılı'
+    if (
+      (response.data && response.data.status === 'success') || 
+      (response.data && response.data.description && response.data.description.includes('başarılı'))
+    ) {
       return { success: true, data: response.data };
     } else {
       console.error("PullSMS hata döndürdü:", response.data);

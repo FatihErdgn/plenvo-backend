@@ -75,7 +75,15 @@ const calendarAppointmentSchema = new Schema(
     reminderSent: {
       type: Boolean,
       default: false // WhatsApp hatırlatma gönderildi mi
-    }
+    },
+    smsImmediateSent: {
+      type: Boolean,
+      default: false, // SMS anında gönderildi mi
+    },
+    smsReminderSent: {
+      type: Boolean,
+      default: false, // SMS hatırlatma gönderildi mi
+    },
   },
   { timestamps: true }
 );

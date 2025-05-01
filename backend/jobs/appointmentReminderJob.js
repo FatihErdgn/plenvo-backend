@@ -1,5 +1,5 @@
 const cron = require("node-cron");
-const moment = require("moment");
+const moment = require("moment-timezone");
 const Appointment = require("../models/Appointment");
 const CalendarAppointment = require("../models/CalendarAppointment");
 const Customer = require("../models/Customer");
@@ -39,7 +39,7 @@ async function processAppointmentReminders() {
 
   const appointments = await Appointment.find({
     datetime: { $gt: now.toDate(), $lt: tomorrow.toDate() },
-    reminderSent: { $ne: true },
+    smsReminderSent: { $ne: true },
     isDeleted: { $ne: true },
   })
     .populate("customerId")
@@ -59,7 +59,7 @@ async function processAppointmentReminders() {
         );
         // Geçmiş randevuyu işaretleyelim ki tekrar tekrar sorgulanmasın
         await Appointment.findByIdAndUpdate(appointment._id, {
-          reminderSent: true,
+          smsReminderSent: true,
         });
         continue;
       }
@@ -81,7 +81,7 @@ async function processCalendarAppointmentReminders() {
 
   const calendarAppointments = await CalendarAppointment.find({
     appointmentDate: { $gt: now.toDate(), $lt: tomorrow.toDate() },
-    reminderSent: { $ne: true },
+    smsReminderSent: { $ne: true },
   })
     .populate("customerId")
     .populate("doctorId");
@@ -99,7 +99,7 @@ async function processCalendarAppointmentReminders() {
         );
         // Geçmiş randevuyu işaretleyelim ki tekrar tekrar sorgulanmasın
         await CalendarAppointment.findByIdAndUpdate(appointment._id, {
-          reminderSent: true,
+          smsReminderSent: true,
         });
         continue;
       }
@@ -133,8 +133,8 @@ async function sendReminderForAppointment(appointment) {
   }
 
   // Mesaj içeriğini oluştur
-  const dateStr = moment(appointment.datetime).format("DD.MM.YYYY");
-  const timeStr = moment(appointment.datetime).format("HH:mm");
+  const dateStr = moment(appointment.datetime).tz("Europe/Istanbul").format("DD.MM.YYYY");
+  const timeStr = moment(appointment.datetime).tz("Europe/Istanbul").format("HH:mm");
   const doctorName = appointment.doctorId
     ? `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`
     : "uzmanınız";
@@ -144,27 +144,34 @@ async function sendReminderForAppointment(appointment) {
   const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.
 ${customerName} Sağlıklı Yaşam Merkezi`;
 
-  // // WhatsApp üzerinden mesaj gönder
-  // const result = await sendWhatsAppMessage(
-  //   appointment.customerId.pullSmsApiKey,
-  //   [phoneNumber],
-  //   message
-  // );
-
-  if (result.success) {
-    // Başarılı ise, hatırlatma gönderildi olarak işaretle
-    await Appointment.findByIdAndUpdate(appointment._id, {
-      reminderSent: true,
-    });
-
-    // Mesaj sayısını artır
-    await trackMessageSent(appointment.customerId._id);
-    console.log(`Appointment ${appointment._id} hatırlatması gönderildi`);
-  } else {
-    console.error(
-      `Appointment ${appointment._id} hatırlatma başarısız:`,
-      result.error
+  // WhatsApp üzerinden mesaj gönder
+  try {
+    const result = await sendWhatsAppMessage(
+      appointment.customerId.pullSmsApiKey,
+      [phoneNumber],
+      message
     );
+
+    console.log("PullSMS yanıtı:", result);
+
+    // Check for success - either explicit success flag or description indicating success
+    if (result.success || (result.description && result.description.includes('başarılı'))) {
+      // Başarılı ise, hatırlatma gönderildi olarak işaretle
+      await Appointment.findByIdAndUpdate(appointment._id, {
+        smsReminderSent: true,
+      });
+
+      // Mesaj sayısını artır
+      await trackMessageSent(appointment.customerId._id);
+      console.log(`Appointment ${appointment._id} hatırlatması gönderildi`);
+    } else {
+      console.error(
+        `Appointment ${appointment._id} hatırlatma başarısız:`,
+        result.error || result
+      );
+    }
+  } catch (error) {
+    console.error(`Appointment ${appointment._id} mesaj gönderme hatası:`, error);
   }
 }
 
@@ -199,15 +206,15 @@ async function sendReminderForCalendarAppointment(appointment) {
   }
 
   // Mesaj içeriğini oluştur
-  const calDateStr = moment(appointment.appointmentDate).format("DD.MM.YYYY");
-  const calTimeStr = moment(appointment.appointmentDate).format("HH:mm");
+  const calDateStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("DD.MM.YYYY");
+  const calTimeStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("HH:mm");
   const doctorName = appointment.doctorId
     ? `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`
     : "uzmanınız";
   const customerName = appointment.customerId?.customerName || "";
 
   // Katılımcı isimleri
-  let participantNames = "Sayın Hasta";
+  let participantNames = "Sayın";
   if (appointment.participants && appointment.participants.length > 0) {
     participantNames = appointment.participants.map((p) => p.name).join(", ");
   }
@@ -215,32 +222,39 @@ async function sendReminderForCalendarAppointment(appointment) {
   const message = `Sayın ${participantNames}, ${calDateStr} tarihindeki ${calTimeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.
 ${customerName} Sağlıklı Yaşam Merkezi`;
 
-  // // WhatsApp üzerinden mesaj gönder
-  // const result = await sendWhatsAppMessage(
-  //   appointment.customerId.pullSmsApiKey,
-  //   phoneNumbers,
-  //   message
-  // );
+  // WhatsApp üzerinden mesaj gönder
+  try {
+    const result = await sendWhatsAppMessage(
+      appointment.customerId.pullSmsApiKey,
+      phoneNumbers,
+      message
+    );
 
-  if (result.success) {
-    // Başarılı ise, hatırlatma gönderildi olarak işaretle
-    await CalendarAppointment.findByIdAndUpdate(appointment._id, {
-      reminderSent: true,
-    });
+    console.log("PullSMS yanıtı:", result);
 
-    // Mesaj sayısını telefonların sayısı kadar artır
-    for (let i = 0; i < phoneNumbers.length; i++) {
-      await trackMessageSent(appointment.customerId._id);
+    // Check for success - either explicit success flag or description indicating success
+    if (result.success || (result.description && result.description.includes('başarılı'))) {
+      // Başarılı ise, hatırlatma gönderildi olarak işaretle
+      await CalendarAppointment.findByIdAndUpdate(appointment._id, {
+        smsReminderSent: true,
+      });
+
+      // Mesaj sayısını telefonların sayısı kadar artır
+      for (let i = 0; i < phoneNumbers.length; i++) {
+        await trackMessageSent(appointment.customerId._id);
+      }
+
+      console.log(
+        `CalendarAppointment ${appointment._id} hatırlatması gönderildi (${phoneNumbers.length} numara)`
+      );
+    } else {
+      console.error(
+        `CalendarAppointment ${appointment._id} hatırlatma başarısız:`,
+        result.error || result
+      );
     }
-
-    console.log(
-      `CalendarAppointment ${appointment._id} hatırlatması gönderildi (${phoneNumbers.length} numara)`
-    );
-  } else {
-    console.error(
-      `CalendarAppointment ${appointment._id} hatırlatma başarısız:`,
-      result.error
-    );
+  } catch (error) {
+    console.error(`CalendarAppointment ${appointment._id} mesaj gönderme hatası:`, error);
   }
 }
 
@@ -252,21 +266,21 @@ async function markPastAppointments() {
   await Appointment.updateMany(
     {
       datetime: { $lt: now.toDate() },
-      reminderSent: { $ne: true },
+      smsReminderSent: { $ne: true },
       isDeleted: { $ne: true },
     },
     {
-      reminderSent: true,
+      smsReminderSent: true,
     }
   );
 
   await CalendarAppointment.updateMany(
     {
       appointmentDate: { $lt: now.toDate() },
-      reminderSent: { $ne: true },
+      smsReminderSent: { $ne: true },
     },
     {
-      reminderSent: true,
+      smsReminderSent: true,
     }
   );
 
@@ -278,7 +292,7 @@ async function markPastAppointments() {
 cron.schedule("45 14 * * *", markPastAppointments);
 
 // Ana hatırlatma işi - Her gün saat 15:00'te çalışır
-cron.schedule("0 15 * * *", sendAppointmentReminders);
+cron.schedule("00 15 * * *", sendAppointmentReminders);
 
 module.exports = {
   sendAppointmentReminders,

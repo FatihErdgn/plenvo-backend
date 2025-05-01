@@ -49,19 +49,19 @@ async function sendAppointmentImmediateReminder(appointmentId) {
     const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuz oluşturulmuştur. Sağlıklı ve mutlu günler dileriz.
 ${customerName} Sağlıklı Yaşam Merkezi`;
 
-    // // WhatsApp üzerinden mesaj gönder
-    // const result = await sendWhatsAppMessage(
-    //   appointment.customerId.pullSmsApiKey,
-    //   [appointment.phoneNumber],
-    //   message
-    // );
+    // WhatsApp üzerinden mesaj gönder
+    const result = await sendWhatsAppMessage(
+      appointment.customerId.pullSmsApiKey,
+      [appointment.phoneNumber],
+      message
+    );
 
     console.log(result);
 
     if (result.success) {
       // Başarılı ise, hatırlatma gönderildi olarak işaretle
       await Appointment.findByIdAndUpdate(appointmentId, {
-        reminderSent: true,
+        smsImmediateSent: true,
       });
 
       // Mesaj sayısını artır
@@ -155,17 +155,17 @@ async function sendCalendarAppointmentImmediateReminder(appointmentId) {
     const message = `Sayın ${participantNames}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuz oluşturulmuştur. Sağlıklı ve mutlu günler dileriz.
 ${customerName} Sağlıklı Yaşam Merkezi`;
 
-    // // WhatsApp üzerinden mesaj gönder
-    // const result = await sendWhatsAppMessage(
-    //   appointment.customerId.pullSmsApiKey,
-    //   phoneNumbers,
-    //   message
-    // );
+    // WhatsApp üzerinden mesaj gönder
+    const result = await sendWhatsAppMessage(
+      appointment.customerId.pullSmsApiKey,
+      phoneNumbers,
+      message
+    );
 
     if (result.success) {
       // Başarılı ise, hatırlatma gönderildi olarak işaretle
       await CalendarAppointment.findByIdAndUpdate(appointmentId, {
-        reminderSent: true,
+        smsImmediateSent: true,
       });
 
       // Mesaj sayısını telefonların sayısı kadar artır
