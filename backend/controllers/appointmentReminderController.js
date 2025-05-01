@@ -47,7 +47,7 @@ async function sendAppointmentImmediateReminder(appointmentId) {
     const customerName = appointment.customerId?.customerName || "";
 
     const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.
-  ${customerName} Sağlıklı Yaşam Merkezi`;
+${customerName} Sağlıklı Yaşam Merkezi`;
 
     // WhatsApp üzerinden mesaj gönder
     const result = await sendWhatsAppMessage(
@@ -153,7 +153,7 @@ async function sendCalendarAppointmentImmediateReminder(appointmentId) {
     }
 
     const message = `Sayın ${participantNames}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.
-  ${customerName} Sağlıklı Yaşam Merkezi`;
+${customerName} Sağlıklı Yaşam Merkezi`;
 
     // WhatsApp üzerinden mesaj gönder
     const result = await sendWhatsAppMessage(
