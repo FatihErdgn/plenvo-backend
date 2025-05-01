@@ -144,12 +144,12 @@ async function sendReminderForAppointment(appointment) {
   const message = `Sayın ${appointment.clientFirstName} ${appointment.clientLastName}, ${dateStr} tarihindeki ${timeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.
 ${customerName} Sağlıklı Yaşam Merkezi`;
 
-  // WhatsApp üzerinden mesaj gönder
-  const result = await sendWhatsAppMessage(
-    appointment.customerId.pullSmsApiKey,
-    [phoneNumber],
-    message
-  );
+  // // WhatsApp üzerinden mesaj gönder
+  // const result = await sendWhatsAppMessage(
+  //   appointment.customerId.pullSmsApiKey,
+  //   [phoneNumber],
+  //   message
+  // );
 
   if (result.success) {
     // Başarılı ise, hatırlatma gönderildi olarak işaretle
@@ -215,12 +215,12 @@ async function sendReminderForCalendarAppointment(appointment) {
   const message = `Sayın ${participantNames}, ${calDateStr} tarihindeki ${calTimeStr} saatindeki randevunuzu hatırlatır, sağlıklı ve mutlu günler dileriz.
 ${customerName} Sağlıklı Yaşam Merkezi`;
 
-  // WhatsApp üzerinden mesaj gönder
-  const result = await sendWhatsAppMessage(
-    appointment.customerId.pullSmsApiKey,
-    phoneNumbers,
-    message
-  );
+  // // WhatsApp üzerinden mesaj gönder
+  // const result = await sendWhatsAppMessage(
+  //   appointment.customerId.pullSmsApiKey,
+  //   phoneNumbers,
+  //   message
+  // );
 
   if (result.success) {
     // Başarılı ise, hatırlatma gönderildi olarak işaretle
