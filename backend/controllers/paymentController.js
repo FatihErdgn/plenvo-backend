@@ -9,12 +9,17 @@ const mongoose = require("mongoose");
 /**
  * Ödeme periyoduna göre bitiş tarihini hesaplayan yardımcı fonksiyon
  * @param {String} period - Ödeme periyodu (monthly, quarterly, biannual)
- * @param {Date} startDate - Başlangıç tarihi
- * @param {Date} appointmentDate - Randevu tarihi (tek seferlik ödemeler için kullanılır)
+ * @param {Date} startDate - Başlangıç tarihi (artık kullanılmıyor)
+ * @param {Date} appointmentDate - Randevu tarihi
  * @returns {Date|null} - Periyot bitiş tarihi veya null
  */
 const calculatePeriodEndDate = (period, startDate, appointmentDate = null) => {
-  const endDate = new Date(startDate);
+  // Artık randevu tarihini referans noktası olarak kullanıyoruz
+  // Eğer appointmentDate verilmemişse, hata durumunu önlemek için startDate'i kullanırız
+  const referenceDate = appointmentDate || startDate;
+  
+  // Referans tarihten bir kopya oluştur (orijinal tarihi değiştirmemek için)
+  const endDate = new Date(referenceDate);
   
   switch(period) {
     case "monthly":
@@ -29,13 +34,16 @@ const calculatePeriodEndDate = (period, startDate, appointmentDate = null) => {
     case "single":
     default:
       // Tek seferlik ödemeler için sadece belirli randevu tarihi için geçerli olacak
-      // Spesifik bir randevu tarihi sağlandıysa onu kullanırız
       if (appointmentDate) {
-        return new Date(appointmentDate);
+        // Randevu günü boyunca geçerli olması için gün sonuna ayarla
+        endDate.setHours(23, 59, 59, 999);
+        return endDate;
       }
       return null; // Tarih belirtilmediyse null döndür
   }
   
+  // Periyodun son gününün tamamını kapsaması için gün sonuna ayarla
+  endDate.setHours(23, 59, 59, 999);
   return endDate;
 };
 
@@ -162,7 +170,8 @@ exports.createPayment = async (req, res) => {
 
     const paymentDateFinal = paymentDate ? new Date(paymentDate) : new Date();
 
-    // Periyot bitiş tarihini hesapla
+    // Periyot bitiş tarihini hesapla - artık randevu tarihini referans alıyoruz
+    // Appointment.appointmentDate, randevunun tarihini içerir
     const periodEndDate = calculatePeriodEndDate(paymentPeriod, paymentDateFinal, appointment.appointmentDate);
 
     const foundCurrency = await Currency.findOne({ currencyName });
@@ -274,35 +283,38 @@ exports.updatePayment = async (req, res) => {
     const paymentId = req.params.id;
     const updateData = req.body;
     
-    // Eğer ödeme periyodu değiştiyse, periyot bitiş tarihini tekrar hesapla
-    if (updateData.paymentPeriod) {
-      const payment = await Payment.findById(paymentId);
-      if (!payment) {
-        return res.status(404).json({ success: false, message: "Ödeme bulunamadı." });
-      }
-      
-      const paymentDate = updateData.paymentDate ? new Date(updateData.paymentDate) : payment.paymentDate;
-      updateData.periodEndDate = calculatePeriodEndDate(updateData.paymentPeriod, paymentDate, payment.appointmentDate);
+    // Mevcut ödemeyi bul
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Ödeme bulunamadı." });
     }
-
-    const updatedPayment = await Payment.findByIdAndUpdate(
-      paymentId,
-      updateData,
-      { new: true }
-    );
-    if (!updatedPayment) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Ödeme bulunamadı." });
-    }
-
-    const appointmentId = updatedPayment.appointmentId;
+    
+    // İlgili randevuyu bul
+    const appointmentId = payment.appointmentId;
     let appointment = await Appointment.findById(appointmentId);
     let isCalendar = false;
     if (!appointment) {
       appointment = await CalendarAppointment.findById(appointmentId);
       if (appointment) isCalendar = true;
+      if (!appointment) {
+        return res.status(404).json({ success: false, message: "Randevu bulunamadı." });
+      }
     }
+    
+    // Eğer ödeme periyodu değiştiyse, periyot bitiş tarihini tekrar hesapla
+    if (updateData.paymentPeriod) {
+      const paymentDate = updateData.paymentDate ? new Date(updateData.paymentDate) : payment.paymentDate;
+      // Randevu tarihini referans alarak periyot bitiş tarihini hesapla
+      updateData.periodEndDate = calculatePeriodEndDate(updateData.paymentPeriod, paymentDate, appointment.appointmentDate);
+    }
+
+    // Güncellemeyi uygula
+    const updatedPayment = await Payment.findByIdAndUpdate(
+      paymentId,
+      updateData,
+      { new: true }
+    );
+    
     if (appointment) {
       let cumulativePaid, totalServiceFee;
       
@@ -452,42 +464,72 @@ exports.getPaymentsByAppointment = async (req, res) => {
         isDeleted: false,
       });
       
-      // Sadece geçerli ödemeleri filtrele
-      payments = allPayments.filter(payment => {
+      // Ödemelerin geçerlilik durumlarını belirle ve filtreleme yap
+      payments = allPayments.map(payment => {
+        // Her ödeme için geçerlilik durumunu hesapla
+        let isValid = false;
+        
         // Tek seferlik ödemeler (single) için özel kontrol:
-        // 1. Eğer payment.appointmentId, istenen appointmentId ile eşleşiyorsa geçerli
-        // 2. Diğer durumlarda (tekrarlı randevular) bu tek seferlik ödeme geçerli değil
         if (payment.paymentPeriod === 'single') {
           // Eğer randevu ID "_instance_" içeriyorsa, parent ID'ye eşit mi diye kontrol et
           if (typeof appointmentId === 'string' && appointmentId.includes('_instance_')) {
             const parentId = appointmentId.split('_instance_')[0];
-            return payment.appointmentId.toString() === parentId;
+            isValid = payment.appointmentId.toString() === parentId;
+          } else {
+            // Normal randevularda direkt eşitliği kontrol et
+            isValid = payment.appointmentId.toString() === appointmentId;
           }
-          // Normal randevularda direkt eşitliği kontrol et
-          return payment.appointmentId.toString() === appointmentId;
+        } else {
+          // Periyotlu ödemeler için: Randevu tarihi ödeme periyodunun bitiş tarihinden önce mi?
+          if (!payment.periodEndDate) {
+            isValid = true; // Periyot bitiş tarihi yoksa her zaman geçerli
+          } else {
+            const periodEnd = new Date(payment.periodEndDate);
+            isValid = appointmentDate <= periodEnd;
+          }
         }
         
-        // Periyotlu ödemeler için: Randevu tarihi ödeme periyodunun bitiş tarihinden önce mi?
-        if (!payment.periodEndDate) return true; // Periyot bitiş tarihi yoksa her zaman geçerli
-        
-        const periodEnd = new Date(payment.periodEndDate);
-        return appointmentDate <= periodEnd;
+        // Payment objesinin bir kopyasını oluştur ve isValid ekle
+        const paymentObj = payment.toObject();
+        paymentObj.isValid = isValid;
+        return paymentObj;
       });
+      
+      // Sadece geçerli ödemeleri filtrele
+      const validPayments = payments.filter(payment => payment.isValid);
+      
+      // İlk olarak geçerli ödemeleri, sonra geçersiz olanları göster (frontend için kolaylık)
+      payments = [...validPayments, ...payments.filter(payment => !payment.isValid)];
     } else {
       const allPayments = await Payment.find({ appointmentId, isDeleted: false });
       
-      // Sadece geçerli ödemeleri filtrele
-      payments = allPayments.filter(payment => {
-        // Tekrarlı olmayan randevularda periyot kontrolü yapmaya gerek yok
-        if (payment.paymentPeriod === 'single') return true;
+      // Ödemelerin geçerlilik durumlarını belirle
+      payments = allPayments.map(payment => {
+        // Her ödeme için geçerlilik durumunu hesapla
+        let isValid = false;
         
-        // Periyotlu ödemeler için tarih kontrolü
-        if (!payment.periodEndDate) return true;
+        // Tekrarlı olmayan randevularda tek seferlik ödemeler her zaman geçerli
+        if (payment.paymentPeriod === 'single') {
+          isValid = true;
+        } else {
+          // Periyotlu ödemeler için tarih kontrolü
+          if (!payment.periodEndDate) {
+            isValid = true; // Periyot bitiş tarihi yoksa her zaman geçerli
+          } else {
+            const periodEnd = new Date(payment.periodEndDate);
+            isValid = appointmentDate <= periodEnd;
+          }
+        }
         
-        // Periyotlu ödemeler için: Randevu tarihi ödeme periyodunun bitiş tarihinden önce mi?
-        const periodEnd = new Date(payment.periodEndDate);
-        return appointmentDate <= periodEnd;
+        // Payment objesinin bir kopyasını oluştur ve isValid ekle
+        const paymentObj = payment.toObject();
+        paymentObj.isValid = isValid;
+        return paymentObj;
       });
+      
+      // İlk olarak geçerli ödemeleri, sonra geçersiz olanları göster
+      const validPayments = payments.filter(payment => payment.isValid);
+      payments = [...validPayments, ...payments.filter(payment => !payment.isValid)];
     }
 
     // Eğer ödeme kaydı yoksa 404 yerine 200 dönüp boş liste gönderebilirsiniz
