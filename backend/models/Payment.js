@@ -56,6 +56,16 @@ const paymentSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  // Ödeme periyodu alanları
+  paymentPeriod: {
+    type: String,
+    enum: ["single", "monthly", "quarterly", "biannual"],
+    default: "single" // Tek seferlik ödeme varsayılan
+  },
+  periodEndDate: {
+    type: Date,
+    default: null // Periyot sonu tarihi
+  },
   isDeleted: { type: Boolean, default: false }, // Soft delete alanı
 });
 
