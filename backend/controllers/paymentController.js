@@ -14,9 +14,46 @@ const mongoose = require("mongoose");
  * @returns {Date|null} - Periyot bitiş tarihi veya null
  */
 const calculatePeriodEndDate = (period, startDate, appointmentDate = null) => {
+  // Debug: Gelen parametreleri kontrol et
+  console.log("calculatePeriodEndDate - Gelen periyot:", period);
+  console.log("calculatePeriodEndDate - Gelen startDate:", startDate);
+  console.log("calculatePeriodEndDate - Gelen appointmentDate:", appointmentDate);
+  
+  // Sağlam tarih kontrolü
+  let validStartDate, validAppointmentDate;
+  
+  // startDate kontrolü
+  try {
+    validStartDate = startDate instanceof Date ? startDate : new Date(startDate);
+    if (isNaN(validStartDate.getTime())) {
+      console.log("calculatePeriodEndDate - UYARI: Geçersiz startDate, şimdiki zamanı kullanıyorum");
+      validStartDate = new Date();
+    }
+  } catch (e) {
+    console.error("calculatePeriodEndDate - startDate dönüşüm hatası:", e);
+    validStartDate = new Date();
+  }
+  
+  // appointmentDate kontrolü
+  try {
+    validAppointmentDate = appointmentDate instanceof Date ? appointmentDate : 
+                          (appointmentDate ? new Date(appointmentDate) : null);
+    
+    if (validAppointmentDate && isNaN(validAppointmentDate.getTime())) {
+      console.log("calculatePeriodEndDate - UYARI: Geçersiz appointmentDate, startDate kullanıyorum");
+      validAppointmentDate = null;
+    }
+  } catch (e) {
+    console.error("calculatePeriodEndDate - appointmentDate dönüşüm hatası:", e);
+    validAppointmentDate = null;
+  }
+  
   // Artık randevu tarihini referans noktası olarak kullanıyoruz
-  // Eğer appointmentDate verilmemişse, hata durumunu önlemek için startDate'i kullanırız
-  const referenceDate = appointmentDate || startDate;
+  // Eğer validAppointmentDate null ise, validStartDate'i kullanırız
+  const referenceDate = validAppointmentDate || validStartDate;
+  
+  console.log("calculatePeriodEndDate - Kullanılan referans tarihi:", referenceDate);
+  console.log("calculatePeriodEndDate - Referans tarih ISO formatı:", referenceDate.toISOString());
   
   // Referans tarihten bir kopya oluştur (orijinal tarihi değiştirmemek için)
   const endDate = new Date(referenceDate);
@@ -34,9 +71,10 @@ const calculatePeriodEndDate = (period, startDate, appointmentDate = null) => {
     case "single":
     default:
       // Tek seferlik ödemeler için sadece belirli randevu tarihi için geçerli olacak
-      if (appointmentDate) {
+      if (validAppointmentDate) {
         // Randevu günü boyunca geçerli olması için gün sonuna ayarla
         endDate.setHours(23, 59, 59, 999);
+        console.log("calculatePeriodEndDate - Hesaplanan bitiş tarihi (tek seferlik):", endDate.toISOString());
         return endDate;
       }
       return null; // Tarih belirtilmediyse null döndür
@@ -44,6 +82,8 @@ const calculatePeriodEndDate = (period, startDate, appointmentDate = null) => {
   
   // Periyodun son gününün tamamını kapsaması için gün sonuna ayarla
   endDate.setHours(23, 59, 59, 999);
+  
+  console.log("calculatePeriodEndDate - Hesaplanan bitiş tarihi:", endDate.toISOString());
   return endDate;
 };
 
@@ -77,6 +117,7 @@ exports.createPayment = async (req, res) => {
       appointmentId,
       paymentDate, // opsiyonel
       paymentPeriod = "single", // Yeni: ödeme periyodu (varsayılan: tek seferlik)
+      actualAppointmentDate, // Yeni: frontend'den gelen instance'ın gerçek tarihi
     } = req.body;
 
     if (
@@ -170,9 +211,47 @@ exports.createPayment = async (req, res) => {
 
     const paymentDateFinal = paymentDate ? new Date(paymentDate) : new Date();
 
-    // Periyot bitiş tarihini hesapla - artık randevu tarihini referans alıyoruz
-    // Appointment.appointmentDate, randevunun tarihini içerir
-    const periodEndDate = calculatePeriodEndDate(paymentPeriod, paymentDateFinal, appointment.appointmentDate);
+    // Debug: Frontend'den gelen tarih bilgisini kontrol et
+    console.log("createPayment - Frontend'den gelen actualAppointmentDate:", actualAppointmentDate);
+    console.log("createPayment - DB'den gelen appointment.appointmentDate:", appointment.appointmentDate);
+    
+    // Periyot bitiş tarihini hesapla - artık frontend'den gelen gerçek instance tarihini kullanıyoruz
+    // Eğer actualAppointmentDate gönderilmişse onu, yoksa veritabanındaki appointment.appointmentDate'i kullan
+    let dateToUse;
+    
+    if (actualAppointmentDate) {
+      try {
+        dateToUse = new Date(actualAppointmentDate);
+        
+        // Geçersiz tarih kontrolü
+        if (isNaN(dateToUse.getTime())) {
+          console.log("createPayment - UYARI: Geçersiz actualAppointmentDate formatı, DB tarihi kullanılacak");
+          dateToUse = appointment.appointmentDate;
+        }
+      } catch (e) {
+        console.error("createPayment - Tarih çevirme hatası:", e);
+        dateToUse = appointment.appointmentDate;
+      }
+    } else {
+      dateToUse = appointment.appointmentDate;
+    }
+    
+    // Eğer appointment.appointmentDate bir string ise Date objesine çevir
+    if (typeof dateToUse === 'string') {
+      dateToUse = new Date(dateToUse);
+    }
+    
+    // Debug: Hesaplamada kullanılan tarihi kontrol et
+    console.log("createPayment - Kullanılan tarih (dateToUse):", dateToUse);
+    console.log("createPayment - dateToUse tarih tipi:", typeof dateToUse);
+    console.log("createPayment - dateToUse instanceof Date:", dateToUse instanceof Date);
+    console.log("createPayment - dateToUse ISO formatı:", dateToUse instanceof Date ? dateToUse.toISOString() : "Tarih değil");
+    
+    const periodEndDate = calculatePeriodEndDate(paymentPeriod, paymentDateFinal, dateToUse);
+    
+    // Debug: Hesaplanan periyot bitiş tarihini kontrol et
+    console.log("createPayment - Hesaplanan periyot bitiş tarihi:", periodEndDate);
+    console.log("createPayment - periodEndDate ISO formatı:", periodEndDate instanceof Date ? periodEndDate.toISOString() : "Tarih değil");
 
     const foundCurrency = await Currency.findOne({ currencyName });
     if (!foundCurrency) {
@@ -199,8 +278,8 @@ exports.createPayment = async (req, res) => {
       paymentDescription,
       serviceFee: totalServiceFee,
       serviceDescription: serviceDescriptions.join(", "),
-      paymentPeriod, // Yeni: ödeme periyodu
-      periodEndDate, // Yeni: periyot bitiş tarihi
+      paymentPeriod, // Ödeme periyodu
+      periodEndDate, // Periyot bitiş tarihi
       isDeleted: false,
     });
 
@@ -304,8 +383,48 @@ exports.updatePayment = async (req, res) => {
     // Eğer ödeme periyodu değiştiyse, periyot bitiş tarihini tekrar hesapla
     if (updateData.paymentPeriod) {
       const paymentDate = updateData.paymentDate ? new Date(updateData.paymentDate) : payment.paymentDate;
+      
+      // Debug: Frontend'den gelen tarih bilgisini kontrol et
+      console.log("updatePayment - Frontend'den gelen actualAppointmentDate:", updateData.actualAppointmentDate);
+      console.log("updatePayment - DB'den gelen appointment.appointmentDate:", appointment.appointmentDate);
+      
+      // Frontend'den gelen gerçek instance tarihini kullan (varsa)
+      let dateToUse;
+      
+      if (updateData.actualAppointmentDate) {
+        try {
+          dateToUse = new Date(updateData.actualAppointmentDate);
+          
+          // Geçersiz tarih kontrolü
+          if (isNaN(dateToUse.getTime())) {
+            console.log("updatePayment - UYARI: Geçersiz actualAppointmentDate formatı, DB tarihi kullanılacak");
+            dateToUse = appointment.appointmentDate;
+          }
+        } catch (e) {
+          console.error("updatePayment - Tarih çevirme hatası:", e);
+          dateToUse = appointment.appointmentDate;
+        }
+      } else {
+        dateToUse = appointment.appointmentDate;
+      }
+      
+      // Eğer appointment.appointmentDate bir string ise Date objesine çevir
+      if (typeof dateToUse === 'string') {
+        dateToUse = new Date(dateToUse);
+      }
+      
+      // Debug: Hesaplamada kullanılan tarihi kontrol et
+      console.log("updatePayment - Kullanılan tarih (dateToUse):", dateToUse);
+      console.log("updatePayment - dateToUse tarih tipi:", typeof dateToUse);
+      console.log("updatePayment - dateToUse instanceof Date:", dateToUse instanceof Date);
+      console.log("updatePayment - dateToUse ISO formatı:", dateToUse instanceof Date ? dateToUse.toISOString() : "Tarih değil");
+        
       // Randevu tarihini referans alarak periyot bitiş tarihini hesapla
-      updateData.periodEndDate = calculatePeriodEndDate(updateData.paymentPeriod, paymentDate, appointment.appointmentDate);
+      updateData.periodEndDate = calculatePeriodEndDate(updateData.paymentPeriod, paymentDate, dateToUse);
+      
+      // Debug: Hesaplanan periyot bitiş tarihini kontrol et
+      console.log("updatePayment - Hesaplanan periyot bitiş tarihi:", updateData.periodEndDate);
+      console.log("updatePayment - periodEndDate ISO formatı:", updateData.periodEndDate instanceof Date ? updateData.periodEndDate.toISOString() : "Tarih değil");
     }
 
     // Güncellemeyi uygula
@@ -489,17 +608,28 @@ exports.getPaymentsByAppointment = async (req, res) => {
           }
         }
         
-        // Payment objesinin bir kopyasını oluştur ve isValid ekle
+        // Payment objesinin bir kopyasını oluştur
         const paymentObj = payment.toObject();
+        
+        // ÖNEMLİ: isValid'e ek olarak, isCompleted değerini de ekle
+        // Bir ödeme ancak:
+        // 1. Geçerli (isValid) VE
+        // 2. Tamamlanmış (paymentStatus === "Tamamlandı")
+        // ise tamamlanmış sayılır
         paymentObj.isValid = isValid;
+        paymentObj.isCompleted = isValid && payment.paymentStatus === "Tamamlandı";
+        
         return paymentObj;
       });
       
-      // Sadece geçerli ödemeleri filtrele
-      const validPayments = payments.filter(payment => payment.isValid);
-      
-      // İlk olarak geçerli ödemeleri, sonra geçersiz olanları göster (frontend için kolaylık)
-      payments = [...validPayments, ...payments.filter(payment => !payment.isValid)];
+      // Önce geçerli-tamamlanmış, sonra geçerli-tamamlanmamış, en son geçersiz ödemeleri göster
+      payments.sort((a, b) => {
+        if (a.isCompleted && !b.isCompleted) return -1;
+        if (!a.isCompleted && b.isCompleted) return 1;
+        if (a.isValid && !b.isValid) return -1;
+        if (!a.isValid && b.isValid) return 1;
+        return 0;
+      });
     } else {
       const allPayments = await Payment.find({ appointmentId, isDeleted: false });
       
@@ -521,15 +651,28 @@ exports.getPaymentsByAppointment = async (req, res) => {
           }
         }
         
-        // Payment objesinin bir kopyasını oluştur ve isValid ekle
+        // Payment objesinin bir kopyasını oluştur
         const paymentObj = payment.toObject();
+        
+        // ÖNEMLİ: isValid'e ek olarak, isCompleted değerini de ekle
+        // Bir ödeme ancak:
+        // 1. Geçerli (isValid) VE
+        // 2. Tamamlanmış (paymentStatus === "Tamamlandı")
+        // ise tamamlanmış sayılır
         paymentObj.isValid = isValid;
+        paymentObj.isCompleted = isValid && payment.paymentStatus === "Tamamlandı";
+        
         return paymentObj;
       });
       
-      // İlk olarak geçerli ödemeleri, sonra geçersiz olanları göster
-      const validPayments = payments.filter(payment => payment.isValid);
-      payments = [...validPayments, ...payments.filter(payment => !payment.isValid)];
+      // Önce geçerli-tamamlanmış, sonra geçerli-tamamlanmamış, en son geçersiz ödemeleri göster
+      payments.sort((a, b) => {
+        if (a.isCompleted && !b.isCompleted) return -1;
+        if (!a.isCompleted && b.isCompleted) return 1;
+        if (a.isValid && !b.isValid) return -1;
+        if (!a.isValid && b.isValid) return 1;
+        return 0;
+      });
     }
 
     // Eğer ödeme kaydı yoksa 404 yerine 200 dönüp boş liste gönderebilirsiniz
