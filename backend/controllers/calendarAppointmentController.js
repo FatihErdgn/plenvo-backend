@@ -214,7 +214,8 @@ exports.createCalendarAppointment = async (req, res) => {
       appointmentDate,
       isRecurring = true,
       endDate = null,
-      appointmentType = "" // Yeni: Randevu Tipi
+      appointmentType = "", // Yeni: Randevu Tipi
+      serviceId = null // Yeni: Randevu Hizmeti
     } = req.body;
     
     const customerId = req.user.customerId;
@@ -263,7 +264,8 @@ exports.createCalendarAppointment = async (req, res) => {
       appointmentDate,
       isRecurring,
       endDate: endDate ? new Date(endDate) : null,
-      appointmentType // Yeni: Randevu Tipi
+      appointmentType, // Yeni: Randevu Tipi
+      serviceId // Yeni: Randevu Hizmeti
     });
 
     await newAppointment.save();
@@ -307,6 +309,7 @@ exports.updateCalendarAppointment = async (req, res) => {
       isRecurring,
       endDate,
       appointmentType, // Yeni: Randevu Tipi
+      serviceId, // Yeni: Randevu Hizmeti
       updateAllInstances = false // Bu parametre tüm serinin mi yoksa sadece bir instance'ın mı güncelleneceğini belirler
     } = req.body;
     
@@ -359,6 +362,7 @@ exports.updateCalendarAppointment = async (req, res) => {
         parentAppointment.isRecurring = isRecurring ?? parentAppointment.isRecurring;
         parentAppointment.endDate = endDate ? new Date(endDate) : parentAppointment.endDate;
         parentAppointment.appointmentType = appointmentType ?? parentAppointment.appointmentType; // Yeni: Randevu Tipi
+        parentAppointment.serviceId = serviceId ?? parentAppointment.serviceId; // Yeni: Randevu Hizmeti
         
         await parentAppointment.save();
         return res.json({ success: true, data: parentAppointment });
@@ -386,7 +390,8 @@ exports.updateCalendarAppointment = async (req, res) => {
           appointmentDate: exceptionDate,
           isRecurring: false,
           recurringParentId: parentAppointment._id,
-          appointmentType: appointmentType ?? parentAppointment.appointmentType // Yeni: Randevu Tipi
+          appointmentType: appointmentType ?? parentAppointment.appointmentType, // Yeni: Randevu Tipi
+          serviceId: serviceId ?? parentAppointment.serviceId // Yeni: Randevu Hizmeti
         });
         
         await newAppointment.save();
@@ -417,6 +422,7 @@ exports.updateCalendarAppointment = async (req, res) => {
       appointment.isRecurring = isRecurring ?? appointment.isRecurring;
       appointment.endDate = endDate ? new Date(endDate) : appointment.endDate;
       appointment.appointmentType = appointmentType ?? appointment.appointmentType; // Yeni: Randevu Tipi
+      appointment.serviceId = serviceId ?? appointment.serviceId; // Yeni: Randevu Hizmeti
       
       await appointment.save();
       return res.json({ success: true, data: appointment });

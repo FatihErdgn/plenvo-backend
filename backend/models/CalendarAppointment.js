@@ -54,6 +54,12 @@ const calendarAppointmentSchema = new Schema(
       enum: ["Ön Görüşme", "Rutin Görüşme", "Muayene", ""],
       default: "",
     },
+    // Randevu Hizmeti alanı
+    serviceId: {
+      type: Schema.Types.ObjectId,
+      ref: "Service",
+      default: null,
+    },
     // Tekrarlı randevular için yeni alanlar
     isRecurring: {
       type: Boolean,
