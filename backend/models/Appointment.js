@@ -55,6 +55,13 @@ const appointmentSchema = new mongoose.Schema({
     default: "Muayene",
   },
 
+  // Randevu Hizmeti referansı
+  serviceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Service",
+    default: null,
+  },
+
   clientFirstName: { type: String },
   clientLastName: { type: String },
   phoneNumber: { type: String },

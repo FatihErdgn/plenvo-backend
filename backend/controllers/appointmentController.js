@@ -23,6 +23,7 @@ exports.createAppointment = async (req, res) => {
       participants,
       statusComment,
       appointmentType,
+      serviceId
     } = req.body;
 
     // Randevu tipi kontrolü
@@ -174,6 +175,7 @@ exports.createAppointment = async (req, res) => {
       doctorId,
       type,
       appointmentType,
+      serviceId,
       clientFirstName,
       clientLastName,
       phoneNumber,
