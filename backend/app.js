@@ -14,7 +14,7 @@ const morgan = require("morgan");
 // require("./jobs/reminderJob");
 require("./jobs/updateAppointmentStatus");
 require('./jobs/salaryExpensesJob'); // Yeni eklenen cron job dosyası
-// require('./jobs/appointmentReminderJob'); // WhatsApp randevu hatırlatma görevi
+require('./jobs/appointmentReminderJob'); // WhatsApp randevu hatırlatma görevi
 
 // Express App Başlat
 const app = express();

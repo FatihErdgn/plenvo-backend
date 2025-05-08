@@ -11,6 +11,11 @@ const {
   markPastAppointments,
 } = require("../jobs/appointmentReminderJob");
 
+// Ensure all models are loaded for proper schema registration
+require("../models/Services");
+require("../models/Appointment");
+require("../models/CalendarAppointment");
+
 // Load environment variables
 const nodeEnv = process.env.NODE_ENV || "development";
 require("dotenv").config({
@@ -49,6 +54,7 @@ mongoose
 async function runJob() {
   try {
     console.log("Starting manual appointment reminder job...");
+    console.log("Mode: Only services with SMS reminders enabled will receive messages");
 
     // Optional: Mark past appointments first
     console.log("Marking past appointments...");

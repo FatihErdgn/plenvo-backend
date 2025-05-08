@@ -2,6 +2,7 @@ const moment = require("moment");
 const Appointment = require("../models/Appointment");
 const CalendarAppointment = require("../models/CalendarAppointment");
 const Customer = require("../models/Customer");
+const Services = require("../models/Services");
 const {
   sendWhatsAppMessage,
   trackMessageSent,
@@ -16,11 +17,31 @@ async function sendAppointmentImmediateReminder(appointmentId) {
     const appointment = await Appointment.findById(appointmentId)
       .populate("customerId")
       .populate("doctorId")
-      .populate("clinicId");
+      .populate("clinicId")
+      .populate("serviceId");
 
     if (!appointment) {
       console.error(`${appointmentId} ID'li randevu bulunamadı`);
       return { success: false, message: "Randevu bulunamadı" };
+    }
+
+    // Randevuya ait servis kontrolü
+    if (!appointment.serviceId) {
+      console.log(`Appointment ${appointmentId} için serviceId bulunamadı`);
+      return { success: false, message: "Servis bilgisi bulunamadı" };
+    }
+
+    // Servis için SMS hatırlatıcı etkin mi?
+    let service = appointment.serviceId;
+    
+    // Eğer populate edilmediyse, servisi manuel olarak bulalım
+    if (!service.isSmsReminderActive && !service.serviceName) {
+      service = await Services.findById(appointment.serviceId);
+    }
+
+    if (!service || !service.isSmsReminderActive) {
+      console.log(`Appointment ${appointmentId} için SMS hatırlatıcı etkin değil`);
+      return { success: false, message: "Bu hizmet için SMS hatırlatıcı etkin değil" };
     }
 
     // Müşteri bilgilerini ve API anahtarını kontrol et
@@ -103,11 +124,31 @@ async function sendCalendarAppointmentImmediateReminder(appointmentId) {
     // Randevu ve ilgili verileri al
     const appointment = await CalendarAppointment.findById(appointmentId)
       .populate("customerId")
-      .populate("doctorId");
+      .populate("doctorId")
+      .populate("serviceId");
 
     if (!appointment) {
       console.error(`${appointmentId} ID'li takvim randevusu bulunamadı`);
       return { success: false, message: "Randevu bulunamadı" };
+    }
+
+    // Randevuya ait servis kontrolü
+    if (!appointment.serviceId) {
+      console.log(`CalendarAppointment ${appointmentId} için serviceId bulunamadı`);
+      return { success: false, message: "Servis bilgisi bulunamadı" };
+    }
+
+    // Servis için SMS hatırlatıcı etkin mi?
+    let service = appointment.serviceId;
+    
+    // Eğer populate edilmediyse, servisi manuel olarak bulalım
+    if (!service.isSmsReminderActive && !service.serviceName) {
+      service = await Services.findById(appointment.serviceId);
+    }
+
+    if (!service || !service.isSmsReminderActive) {
+      console.log(`CalendarAppointment ${appointmentId} için SMS hatırlatıcı etkin değil`);
+      return { success: false, message: "Bu hizmet için SMS hatırlatıcı etkin değil" };
     }
 
     // Müşteri bilgilerini ve API anahtarını kontrol et

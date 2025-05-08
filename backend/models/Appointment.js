@@ -58,7 +58,7 @@ const appointmentSchema = new mongoose.Schema({
   // Randevu Hizmeti referansı
   serviceId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Service",
+    ref: "Services",
     default: null,
   },
 

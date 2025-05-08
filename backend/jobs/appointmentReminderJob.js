@@ -5,6 +5,7 @@ const CalendarAppointment = require("../models/CalendarAppointment");
 const Customer = require("../models/Customer");
 const User = require("../models/User");
 const Clinic = require("../models/Clinic");
+const Services = require("../models/Services");
 const {
   sendWhatsAppMessage,
   trackMessageSent,
@@ -44,7 +45,8 @@ async function processAppointmentReminders() {
   })
     .populate("customerId")
     .populate("doctorId")
-    .populate("clinicId");
+    .populate("clinicId")
+    .populate("serviceId");
 
   console.log(
     `${appointments.length} adet Appointment hatırlatması bekleniyor`
@@ -58,6 +60,29 @@ async function processAppointmentReminders() {
           `Appointment ${appointment._id} geçmiş tarihli, hatırlatma gönderilmeyecek`
         );
         // Geçmiş randevuyu işaretleyelim ki tekrar tekrar sorgulanmasın
+        await Appointment.findByIdAndUpdate(appointment._id, {
+          smsReminderSent: true,
+        });
+        continue;
+      }
+
+      // Randevuya ait servis kontrolü
+      if (!appointment.serviceId) {
+        console.log(`Appointment ${appointment._id} için serviceId bulunamadı`);
+        continue;
+      }
+
+      // Servis için SMS hatırlatıcı etkin mi?
+      let service = appointment.serviceId;
+      
+      // Eğer populate edilmediyse, servisi manuel olarak bulalım
+      if (!service.isSmsReminderActive && !service.serviceName) {
+        service = await Services.findById(appointment.serviceId);
+      }
+
+      if (!service || !service.isSmsReminderActive) {
+        console.log(`Appointment ${appointment._id} için SMS hatırlatıcı etkin değil`);
+        // Randevuyu işaretleyelim ki tekrar sorgulanmasın
         await Appointment.findByIdAndUpdate(appointment._id, {
           smsReminderSent: true,
         });
@@ -84,7 +109,8 @@ async function processCalendarAppointmentReminders() {
     smsReminderSent: { $ne: true },
   })
     .populate("customerId")
-    .populate("doctorId");
+    .populate("doctorId")
+    .populate("serviceId");
 
   console.log(
     `${calendarAppointments.length} adet CalendarAppointment hatırlatması bekleniyor`
@@ -98,6 +124,29 @@ async function processCalendarAppointmentReminders() {
           `CalendarAppointment ${appointment._id} geçmiş tarihli, hatırlatma gönderilmeyecek`
         );
         // Geçmiş randevuyu işaretleyelim ki tekrar tekrar sorgulanmasın
+        await CalendarAppointment.findByIdAndUpdate(appointment._id, {
+          smsReminderSent: true,
+        });
+        continue;
+      }
+
+      // Randevuya ait servis kontrolü
+      if (!appointment.serviceId) {
+        console.log(`CalendarAppointment ${appointment._id} için serviceId bulunamadı`);
+        continue;
+      }
+
+      // Servis için SMS hatırlatıcı etkin mi?
+      let service = appointment.serviceId;
+      
+      // Eğer populate edilmediyse, servisi manuel olarak bulalım
+      if (!service.isSmsReminderActive && !service.serviceName) {
+        service = await Services.findById(appointment.serviceId);
+      }
+
+      if (!service || !service.isSmsReminderActive) {
+        console.log(`CalendarAppointment ${appointment._id} için SMS hatırlatıcı etkin değil`);
+        // Randevuyu işaretleyelim ki tekrar sorgulanmasın
         await CalendarAppointment.findByIdAndUpdate(appointment._id, {
           smsReminderSent: true,
         });

@@ -25,6 +25,7 @@ exports.createService = async (req, res) => {
       serviceType,
       currencyName,
       status,
+      isSmsReminderActive,
     } = req.body;
 
     // Gerekli alanların kontrolü
@@ -82,6 +83,7 @@ exports.createService = async (req, res) => {
       serviceType,
       serviceFee,
       status: status || "active",
+      isSmsReminderActive: isSmsReminderActive || false,
       isDeleted: false,
       lastEditBy,
     });

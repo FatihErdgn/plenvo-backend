@@ -47,6 +47,10 @@ const servicesSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    isSmsReminderActive: {
+      type: Boolean,
+      default: false,
+    },
     isDeleted: { type: Boolean, default: false }, // Soft delete alanı
     lastEditBy: {
       type: mongoose.Schema.Types.ObjectId,

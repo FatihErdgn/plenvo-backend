@@ -57,7 +57,7 @@ const calendarAppointmentSchema = new Schema(
     // Randevu Hizmeti alanı
     serviceId: {
       type: Schema.Types.ObjectId,
-      ref: "Service",
+      ref: "Services",
       default: null,
     },
     // Tekrarlı randevular için yeni alanlar
