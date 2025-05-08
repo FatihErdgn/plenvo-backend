@@ -24,8 +24,8 @@
  */
 
 const mongoose = require('mongoose');
+const path = require("path");
 const Payment = require('../models/Payment');
-const config = require('../config/database');
 
 // Komut satırı argümanlarını işle
 const args = process.argv.slice(2);
@@ -82,16 +82,24 @@ Seçenekler:
 // Hedef bitiş tarihi: Gün sonuna ayarla
 const targetEndDate = new Date(`${endDateStr}T23:59:59.999Z`);
 
-// MongoDB bağlantısı
-mongoose.connect(config.database, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('MongoDB bağlantısı başarılı'))
-.catch(err => {
-  console.error('MongoDB bağlantı hatası:', err);
-  process.exit(1);
+// 30 Nisan 2025 tarihinin limiti
+const PAYMENT_DATE_LIMIT = new Date('2025-04-30T23:59:59.999Z');
+
+// Environment yükleme
+const nodeEnv = process.env.NODE_ENV || "development";
+require("dotenv").config({
+  path: path.resolve(__dirname, `../.env.${nodeEnv}`),
 });
+
+// Fallback: Try to read .env directly if DB_URI is still undefined
+if (!process.env.DB_URI) {
+  require("dotenv").config({
+    path: path.resolve(__dirname, "../.env"),
+  });
+}
+
+// Database connection URI
+const dbUri = process.env.DB_URI || process.env.MONGODB_URI || "mongodb://localhost:27017/plenvo";
 
 // Ana işlem fonksiyonu
 async function updatePaymentPeriods() {
@@ -101,8 +109,17 @@ async function updatePaymentPeriods() {
 - Bitiş Tarihi: ${targetEndDate.toISOString().split('T')[0]}
 - Kuru Çalıştırma: ${dryRun ? 'Evet (güncelleme yapılmayacak)' : 'Hayır (güncelleme yapılacak)'}`);
 
+    // MongoDB bağlantısı
+    console.log(`MongoDB bağlantısı kuruluyor: ${dbUri}`);
+    await mongoose.connect(dbUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    console.log("MongoDB bağlantısı başarılı!");
+
     // paymentPeriod veya periodEndDate alanı eksik olan ödemeleri bul
     // $or operatörü ile herhangi biri olmayan veya null olanları seçiyoruz
+    // Sadece paymentDate'i 30 Nisan 2025'ten önce olan ödemeler için
     const paymentsToUpdate = await Payment.find({
       $or: [
         { paymentPeriod: { $exists: false } },
@@ -110,10 +127,12 @@ async function updatePaymentPeriods() {
         { periodEndDate: { $exists: false } },
         { periodEndDate: null }
       ],
+      paymentDate: { $lt: PAYMENT_DATE_LIMIT }, // 30 Nisan 2025'ten önce olan ödemeler
       isDeleted: false // Sadece silinmemiş ödemeleri güncelle
     });
 
     console.log(`\nToplam ${paymentsToUpdate.length} ödeme kaydı güncellenecek.`);
+    console.log(`(Sadece ${PAYMENT_DATE_LIMIT.toISOString().split('T')[0]} tarihinden önce yapılan ödemeler)`);
     
     if (paymentsToUpdate.length === 0) {
       console.log('Güncellenecek ödeme bulunamadı.');
