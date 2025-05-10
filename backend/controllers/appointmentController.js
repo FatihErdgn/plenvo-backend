@@ -167,6 +167,9 @@ exports.createAppointment = async (req, res) => {
     // uniqueCode üretimi
     const uniqueCode = generateUniqueAppointmentCode();
 
+    // serviceId'yi kontrol et - boşsa null yap
+    const cleanServiceId = serviceId && serviceId.trim() !== "" ? serviceId : null;
+
     // Yeni Appointment belgesini oluştur
     const newAppointment = new Appointment({
       customerId,
@@ -175,7 +178,7 @@ exports.createAppointment = async (req, res) => {
       doctorId,
       type,
       appointmentType,
-      serviceId,
+      serviceId: cleanServiceId,
       clientFirstName,
       clientLastName,
       phoneNumber,
@@ -286,6 +289,11 @@ exports.updateAppointment = async (req, res) => {
           message: "Geçersiz randevu tipi. 'Ön Görüşme' veya 'Muayene' olmalıdır.",
         });
       }
+    }
+
+    // serviceId'yi kontrol et - boşsa null yap
+    if (updateData.serviceId !== undefined) {
+      updateData.serviceId = updateData.serviceId && updateData.serviceId.trim() !== "" ? updateData.serviceId : null;
     }
 
     // Zorunlu alanlarda validasyon yapabilirsiniz
