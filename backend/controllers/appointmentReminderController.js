@@ -59,8 +59,8 @@ async function sendAppointmentImmediateReminder(appointmentId) {
     }
 
     // Mesaj içeriğini oluştur
-    const dateStr = moment(appointment.datetime).format("DD.MM.YYYY");
-    const timeStr = moment(appointment.datetime).format("HH:mm");
+    const dateStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("DD.MM.YYYY");
+    const timeStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("HH:mm");
     const doctorName = appointment.doctorId
       ? `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`
       : "uzmanınız";
@@ -180,8 +180,8 @@ async function sendCalendarAppointmentImmediateReminder(appointmentId) {
     }
 
     // Mesaj içeriğini oluştur
-    const dateStr = moment(appointment.datetime).tz("Europe/Istanbul").format("DD.MM.YYYY");
-    const timeStr = moment(appointment.datetime).tz("Europe/Istanbul").format("HH:mm");
+    const dateStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("DD.MM.YYYY");
+    const timeStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("HH:mm");
     const doctorName = appointment.doctorId
       ? `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`
       : "uzmanınız";
