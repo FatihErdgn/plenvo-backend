@@ -34,11 +34,7 @@ if (!process.env.DB_URI) {
 const dbUri = process.env.DB_URI || process.env.MONGODB_URI || "mongodb://localhost:27017/plenvo";
 
 // DayIndex ve timeIndex'e göre tarihi hesapla
-// Bu fonksiyon, originalJsDate'in bulunduğu haftayı referans alarak,
-// o haftanın dayIndex'inci gününe ve timeIndex'inci saat dilimine (Istanbul saatiyle 9'dan başlayarak)
-// karşılık gelen UTC tarihini hesaplar.
 function calculateCorrectDate(originalJsDate, dayIndex, timeIndex) {
-  // originalJsDate bir JavaScript Date nesnesidir (yani UTC).
 
   // 1. Adım: Orijinal tarihi (UTC) Istanbul zaman dilimindeki bir moment nesnesine çevir.
   // Bu, hafta başlangıcını ve diğer işlemleri Istanbul zamanına göre doğru yapabilmek için gereklidir.
@@ -117,8 +113,8 @@ async function main() {
     const sampleAppointments = appointmentsToFix.slice(0, 5);
     
     sampleAppointments.forEach((app, index) => {
-      const currentDate = moment(app.appointmentDate).format("YYYY-MM-DD HH:mm");
-      const correctDate = moment(calculateCorrectDate(app.appointmentDate, app.dayIndex, app.timeIndex)).format("YYYY-MM-DD HH:mm");
+      const currentDate = moment.utc(app.appointmentDate).format("YYYY-MM-DD HH:mm [UTC]");
+      const correctDate = moment.utc(calculateCorrectDate(app.appointmentDate, app.dayIndex, app.timeIndex)).format("YYYY-MM-DD HH:mm [UTC]");
       
       console.log(`${index + 1}. ID: ${app._id}`);
       console.log(`   Katılımcılar: ${app.participants.map(p => p.name).join(', ')}`);
