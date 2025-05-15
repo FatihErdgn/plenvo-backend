@@ -35,8 +35,9 @@ async function sendAppointmentReminders() {
  */
 async function processAppointmentReminders() {
   // Sadece gelecek 24 saat içindeki ve henüz hatırlatma gönderilmemiş randevuları bul
-  const now = moment();
-  const tomorrow = moment().add(24, "hours");
+  // UTC zamanı kullan (DB'deki tarihler UTC'de saklanıyor)
+  const now = moment().utc();
+  const tomorrow = moment().utc().add(24, "hours");
 
   const appointments = await Appointment.find({
     datetime: { $gt: now.toDate(), $lt: tomorrow.toDate() },
@@ -54,8 +55,8 @@ async function processAppointmentReminders() {
 
   for (const appointment of appointments) {
     try {
-      // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et
-      if (moment(appointment.datetime).isBefore(moment())) {
+      // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et (UTC olarak)
+      if (moment(appointment.datetime).utc().isBefore(moment().utc())) {
         console.log(
           `Appointment ${appointment._id} geçmiş tarihli, hatırlatma gönderilmeyecek`
         );
@@ -101,8 +102,9 @@ async function processAppointmentReminders() {
  */
 async function processCalendarAppointmentReminders() {
   // Sadece gelecek 24 saat içindeki ve henüz hatırlatma gönderilmemiş randevuları bul
-  const now = moment();
-  const tomorrow = moment().add(24, "hours");
+  // UTC zamanı kullan (DB'deki tarihler UTC'de saklanıyor)
+  const now = moment().utc();
+  const tomorrow = moment().utc().add(24, "hours");
 
   const calendarAppointments = await CalendarAppointment.find({
     appointmentDate: { $gt: now.toDate(), $lt: tomorrow.toDate() },
@@ -118,8 +120,8 @@ async function processCalendarAppointmentReminders() {
 
   for (const appointment of calendarAppointments) {
     try {
-      // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et
-      if (moment(appointment.appointmentDate).isBefore(moment())) {
+      // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et (UTC olarak)
+      if (moment(appointment.appointmentDate).utc().isBefore(moment().utc())) {
         console.log(
           `CalendarAppointment ${appointment._id} geçmiş tarihli, hatırlatma gönderilmeyecek`
         );
@@ -309,31 +311,35 @@ ${customerName} Sağlıklı Yaşam Merkezi`;
 
 // Tekrar kontrol ihtiyacını azaltmak için geçmiş randevuları otomatik işaretle
 async function markPastAppointments() {
-  const now = moment();
+  const now = moment().utc();
 
-  // Geçmiş randevuları hatırlatma gönderildi olarak işaretle
-  await Appointment.updateMany(
-    {
-      datetime: { $lt: now.toDate() },
-      smsReminderSent: { $ne: true },
-      isDeleted: { $ne: true },
-    },
-    {
-      smsReminderSent: true,
-    }
-  );
+  try {
+    // Geçmiş randevuları hatırlatma gönderildi olarak işaretle
+    await Appointment.updateMany(
+      {
+        datetime: { $lt: now.toDate() },
+        smsReminderSent: { $ne: true },
+        isDeleted: { $ne: true },
+      },
+      {
+        smsReminderSent: true,
+      }
+    );
 
-  await CalendarAppointment.updateMany(
-    {
-      appointmentDate: { $lt: now.toDate() },
-      smsReminderSent: { $ne: true },
-    },
-    {
-      smsReminderSent: true,
-    }
-  );
+    await CalendarAppointment.updateMany(
+      {
+        appointmentDate: { $lt: now.toDate() },
+        smsReminderSent: { $ne: true },
+      },
+      {
+        smsReminderSent: true,
+      }
+    );
 
-  console.log("Geçmiş randevular işaretlendi:", new Date().toISOString());
+    console.log("Geçmiş randevular işaretlendi:", new Date().toISOString());
+  } catch (error) {
+    console.error("Geçmiş randevuları işaretleme hatası:", error);
+  }
 }
 
 // Ana randevu tarama işlemi öncesinde geçmiş randevuları işaretle
