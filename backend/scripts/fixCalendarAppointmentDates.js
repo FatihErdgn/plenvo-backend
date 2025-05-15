@@ -33,27 +33,36 @@ if (!process.env.DB_URI) {
 // Database connection URI
 const dbUri = process.env.DB_URI || process.env.MONGODB_URI || "mongodb://localhost:27017/plenvo";
 
-// Hafta başlangıcını hesapla (Pazartesi)
-function getWeekStart(date) {
-  // Moment ile pazartesi başlangıçlı hafta başı
-  return moment(date).startOf('isoWeek');
-}
-
 // DayIndex ve timeIndex'e göre tarihi hesapla
-function calculateCorrectDate(originalDate, dayIndex, timeIndex) {
-  // Orijinal tarihten hafta başlangıcını bul
-  const weekStart = getWeekStart(originalDate);
-  
-  // dayIndex kadar (0=Pazartesi, 1=Salı...) gün ekle
-  const correctDay = moment(weekStart).add(dayIndex, 'days');
-  
-  // Saat ayarla (TIME_SLOTS: 09:00 dan başlıyor)
-  correctDay.hour(9 + Math.floor(timeIndex));
-  correctDay.minute(0);
-  correctDay.second(0);
-  correctDay.millisecond(0);
-  
-  return correctDay.toDate();
+// Bu fonksiyon, originalJsDate'in bulunduğu haftayı referans alarak,
+// o haftanın dayIndex'inci gününe ve timeIndex'inci saat dilimine (Istanbul saatiyle 9'dan başlayarak)
+// karşılık gelen UTC tarihini hesaplar.
+function calculateCorrectDate(originalJsDate, dayIndex, timeIndex) {
+  // originalJsDate bir JavaScript Date nesnesidir (yani UTC).
+
+  // 1. Adım: Orijinal tarihi (UTC) Istanbul zaman dilimindeki bir moment nesnesine çevir.
+  // Bu, hafta başlangıcını ve diğer işlemleri Istanbul zamanına göre doğru yapabilmek için gereklidir.
+  const dateInIstanbul = moment(originalJsDate).tz(TIMEZONE);
+
+  // 2. Adım: Istanbul zamanındaki bu tarihin bulunduğu haftanın başlangıcını (Pazartesi 00:00) bul.
+  const weekStartInIstanbul = dateInIstanbul.clone().startOf('isoWeek');
+
+  // 3. Adım: Haftanın başlangıcına dayIndex kadar gün ekleyerek doğru günü bul (hala Istanbul zamanında).
+  // dayIndex: 0 Pazartesi, 1 Salı, ..., 6 Pazar.
+  const correctDayInIstanbul = weekStartInIstanbul.clone().add(dayIndex, 'days');
+
+  // 4. Adım: Saati ayarla. timeIndex=0, Istanbul saatiyle 09:00'a karşılık gelir.
+  // Diğer timeIndex değerleri buna göre saatlik artışlarla belirlenir.
+  correctDayInIstanbul.hour(9 + Math.floor(timeIndex));
+  correctDayInIstanbul.minute(0);
+  correctDayInIstanbul.second(0);
+  correctDayInIstanbul.millisecond(0);
+
+  // 5. Adım: Elde edilen Istanbul zamanındaki doğru tarih ve saati,
+  // JavaScript Date nesnesine (UTC) geri çevir.
+  // Örn: timeIndex = 2 ise Istanbul saati 11:00 olur, bu da 08:00 UTC'dir (TIMEZONE UTC+3 ise).
+  // Yani UTC saat = timeIndex + 6 olur.
+  return correctDayInIstanbul.toDate();
 }
 
 // Readline interface oluştur
