@@ -205,24 +205,24 @@ ${customerName} Sağlıklı Yaşam Merkezi`;
 
     console.log("PullSMS yanıtı:", result);
 
-    // Check for success - either explicit success flag or description indicating success
     if (result.success || (result.description && result.description.includes('başarılı'))) {
-      // Başarılı ise, hatırlatma gönderildi olarak işaretle
-      await Appointment.findByIdAndUpdate(appointment._id, {
-        smsReminderSent: true,
-      });
-
-      // Mesaj sayısını artır
-      await trackMessageSent(appointment.customerId._id);
-      console.log(`Appointment ${appointment._id} hatırlatması gönderildi`);
+      try {
+        await Appointment.findByIdAndUpdate(appointment._id, {
+          smsReminderSent: true,
+        });
+        await trackMessageSent(appointment.customerId._id);
+        console.log(`Appointment ${appointment._id} hatırlatması gönderildi ve bayrak güncellendi.`);
+      } catch (dbError) {
+        console.error(`Appointment ${appointment._id} İÇİN BAYRAK GÜNCELLEME HATASI (MESAJ GÖNDERİLMİŞ OLABİLİR!):`, dbError);
+      }
     } else {
       console.error(
-        `Appointment ${appointment._id} hatırlatma başarısız:`,
+        `Appointment ${appointment._id} hatırlatma API başarısız:`,
         result.error || result
       );
     }
-  } catch (error) {
-    console.error(`Appointment ${appointment._id} mesaj gönderme hatası:`, error);
+  } catch (sendMessageError) {
+    console.error(`Appointment ${appointment._id} MESAJ GÖNDERME API ÇAĞRISI HATASI:`, sendMessageError);
   }
 }
 
@@ -314,29 +314,29 @@ async function markPastAppointments() {
   const now = moment().utc();
 
   try {
-    // Geçmiş randevuları hatırlatma gönderildi olarak işaretle
-    await Appointment.updateMany(
-      {
-        datetime: { $lt: now.toDate() },
-        smsReminderSent: { $ne: true },
-        isDeleted: { $ne: true },
-      },
-      {
-        smsReminderSent: true,
-      }
-    );
+  // Geçmiş randevuları hatırlatma gönderildi olarak işaretle
+  await Appointment.updateMany(
+    {
+      datetime: { $lt: now.toDate() },
+      smsReminderSent: { $ne: true },
+      isDeleted: { $ne: true },
+    },
+    {
+      smsReminderSent: true,
+    }
+  );
 
-    await CalendarAppointment.updateMany(
-      {
-        appointmentDate: { $lt: now.toDate() },
-        smsReminderSent: { $ne: true },
-      },
-      {
-        smsReminderSent: true,
-      }
-    );
+  await CalendarAppointment.updateMany(
+    {
+      appointmentDate: { $lt: now.toDate() },
+      smsReminderSent: { $ne: true },
+    },
+    {
+      smsReminderSent: true,
+    }
+  );
 
-    console.log("Geçmiş randevular işaretlendi:", new Date().toISOString());
+  console.log("Geçmiş randevular işaretlendi:", new Date().toISOString());
   } catch (error) {
     console.error("Geçmiş randevuları işaretleme hatası:", error);
   }
