@@ -108,8 +108,11 @@ async function main() {
       return;
     }
 
+    // Düzeltilecek randevuları appointmentDate'e göre en yeniden eskiye doğru sırala
+    appointmentsToFix.sort((a, b) => moment(b.appointmentDate).valueOf() - moment(a.appointmentDate).valueOf());
+
     // İlk 5 örnek göster
-    console.log("\nDüzeltilecek randevular (ilk 5 örnek):");
+    console.log("\nDüzeltilecek randevular (en yeni 5 örnek):");
     const sampleAppointments = appointmentsToFix.slice(0, 5);
     
     sampleAppointments.forEach((app, index) => {
