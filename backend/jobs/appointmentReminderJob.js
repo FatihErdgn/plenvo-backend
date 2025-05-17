@@ -207,10 +207,10 @@ ${customerName} Sağlıklı Yaşam Merkezi`;
 
     if (result.success || (result.description && result.description.includes('başarılı'))) {
       try {
-        await Appointment.findByIdAndUpdate(appointment._id, {
-          smsReminderSent: true,
-        });
-        await trackMessageSent(appointment.customerId._id);
+      await Appointment.findByIdAndUpdate(appointment._id, {
+        smsReminderSent: true,
+      });
+      await trackMessageSent(appointment.customerId._id);
         console.log(`Appointment ${appointment._id} hatırlatması gönderildi ve bayrak güncellendi.`);
       } catch (dbError) {
         console.error(`Appointment ${appointment._id} İÇİN BAYRAK GÜNCELLEME HATASI (MESAJ GÖNDERİLMİŞ OLABİLİR!):`, dbError);
