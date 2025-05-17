@@ -802,3 +802,97 @@ exports.softDeletePayment = async (req, res) => {
     });
   }
 };
+
+/**
+ * Birden fazla randevu için ödeme durumlarını tek seferde getirme
+ * @param {Request} req - Express request objesi, body'de appointmentIds dizisi içermeli
+ * @param {Response} res - Express response objesi
+ * @returns {Object} Randevuların ödeme durumlarını içeren JSON objesi
+ */
+exports.getBulkPaymentStatus = async (req, res) => {
+  try {
+    const { appointmentIds } = req.body;
+
+    if (!appointmentIds || !Array.isArray(appointmentIds) || appointmentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Geçerli randevu ID'lerinin bir dizisi gereklidir",
+      });
+    }
+
+    // Tüm randevular için ödeme durumlarını içerecek array
+    const paymentStatuses = [];
+
+    // Her bir randevu ID'si için ödeme durumunu kontrol et
+    for (const appointmentId of appointmentIds) {
+      let realAppointmentId = appointmentId;
+      let instanceDate = "";
+      
+      // Sanal instance kontrolü
+      if (appointmentId && appointmentId.includes("_instance_")) {
+        const parts = appointmentId.split("_instance_");
+        realAppointmentId = parts[0];
+        instanceDate = parts[1] || "";
+      }
+      
+      // Ödemeleri getir
+      const payments = await Payment.find({
+        appointmentId: realAppointmentId,
+        isDeleted: false,
+      }).sort({ createdAt: -1 });
+      
+      // Ödemelerin geçerliliğini kontrol et
+      let validPayments = payments;
+      
+      if (instanceDate) {
+        // Instance tarihi için geçerli ödemeleri filtrele
+        const instanceDateObj = new Date(instanceDate);
+        
+        validPayments = payments.filter(payment => {
+          // Ödeme periyodu kontrolü
+          if (!payment.periodEndDate) return false;
+          
+          const periodEndDate = new Date(payment.periodEndDate);
+          return instanceDateObj <= periodEndDate;
+        });
+      }
+      
+      // Geçerli ödemeler ve süresi dolmuş ödemeler
+      const validActivePayments = validPayments.filter(payment => payment.isValid === true);
+      const expiredPayments = validPayments.filter(payment => payment.isValid === false);
+      
+      // Ödeme durumlarını hesapla
+      const isCompleted = validActivePayments.some(payment => payment.isCompleted === true);
+      const isPartialPayment = validActivePayments.some(payment => 
+        payment.isValid === true && payment.isCompleted === false
+      );
+      const totalPaid = validActivePayments.reduce(
+        (acc, payment) => acc + Number(payment.paymentAmount),
+        0
+      );
+      const isExpired = validActivePayments.length === 0 && expiredPayments.length > 0;
+      
+      // Durumu diziye ekle
+      paymentStatuses.push({
+        appointmentId,
+        completed: isCompleted,
+        halfPaid: isPartialPayment,
+        totalPaid,
+        isExpired
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      paymentStatuses
+    });
+    
+  } catch (error) {
+    console.error("getBulkPaymentStatus hatası:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Ödeme durumlarını kontrol ederken bir hata oluştu",
+      error: error.message
+    });
+  }
+};

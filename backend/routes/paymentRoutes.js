@@ -14,6 +14,14 @@ router.get(
   paymentController.getPaymentsByAppointment
 );
 
+// Birden fazla randevu için ödeme durumlarını tek seferde getiren endpoint
+router.post(
+  "/bulk-status",
+  authMiddleware,
+  checkPermission(["admin", "superadmin", "consultant"]),
+  paymentController.getBulkPaymentStatus
+);
+
 // Yeni ödeme oluşturma endpoint'i
 router.post(
   "/",
