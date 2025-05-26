@@ -45,12 +45,8 @@ const sendWhatsAppMessage = async (apiKey, phones, message, webhookId = 5) => {
     let client = axios;
     
     if (isDevelopment) {
-      // Environment variables'dan Ngrok URL'i al ya da sabit URL kullan
-      // Eğer .env.development dosyasında NGROK_URL tanımlanmışsa onu kullanır
-      // Tanımlanmamışsa buradaki sabiti kullanır
       const NGROK_URL = process.env.NGROK_URL || "https://00b4-212-253-219-209.ngrok-free.app";
       
-      // Development için axios instance
       client = axios.create({
         headers: {
           'Origin': NGROK_URL,
@@ -59,41 +55,57 @@ const sendWhatsAppMessage = async (apiKey, phones, message, webhookId = 5) => {
           'X-Forwarded-Host': NGROK_URL.replace('https://', '')
         }
       });
-      // console.log("Development ortamında Ngrok proxy kullanılıyor:", NGROK_URL);
-      // console.log("client: ", client);
     }
     
-    // İsteği client ile yap (development'ta axiosInstance, production'da normal axios)
-    const response = await client.post('https://api.pullsms.com/api/v1/webhook', {
+    const requestPayload = {
       phones: formattedPhones,
       webhookId,
       message
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'apiKey': apiKey,
-        'lang': 'tr'
-      }
+    };
+
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'apiKey': apiKey,
+      'lang': 'tr'
+    };
+
+    console.log("PullSMS API İsteği Gönderiliyor:", { 
+      url: 'https://api.pullsms.com/api/v1/webhook', 
+      payload: requestPayload, 
+      headers: { ...requestHeaders, apiKey: '***' } // API Key'i loglamayalım
     });
+
+    const response = await client.post('https://api.pullsms.com/api/v1/webhook', requestPayload, { headers: requestHeaders });
     
-    console.log("PullSMS yanıtı:", response.data);
+    console.log("PullSMS API Yanıtı Alındı:", response.data);
     
-    // Success check - either status is success OR description contains 'başarılı'
     if (
       (response.data && response.data.status === 'success') || 
       (response.data && response.data.description && response.data.description.includes('başarılı'))
     ) {
       return { success: true, data: response.data };
     } else {
-      console.error("PullSMS hata döndürdü:", response.data);
+      console.error("PullSMS API Hata Yanıtı:", response.data);
       return { success: false, error: response.data };
     }
   } catch (error) {
-    console.error("PullSMS hatası:", error.message);
+    console.error("PullSMS API ÇAĞRI HATASI DETAYLARI:", {
+        message: error.message,
+        code: error.code, 
+        isAxiosError: error.isAxiosError,
+        requestConfig: error.config ? {
+          url: error.config.url,
+          method: error.config.method,
+          headers: { ...error.config.headers, apiKey: '***' }, // API Key'i loglamayalım
+          timeout: error.config.timeout
+        } : undefined,
+        responseStatus: error.response?.status,
+        responseData: error.response?.data
+    });
     return { 
       success: false, 
-      error: error.message,
-      details: error.response?.data || 'Detay yok'
+      error: error.message, 
+      details: error.response?.data || `Kod: ${error.code}, Mesaj: ${error.message}`
     };
   }
 };
@@ -104,7 +116,6 @@ const sendWhatsAppMessage = async (apiKey, phones, message, webhookId = 5) => {
  */
 const trackMessageSent = async (customerId) => {
   try {
-    // Customer modelini dinamik olarak yükle (döngüsel bağımlılıklardan kaçınmak için)
     const Customer = require('../models/Customer');
     await Customer.findByIdAndUpdate(customerId, {
       $inc: { sentMessageCount: 1 }
