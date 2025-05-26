@@ -261,9 +261,9 @@ exports.createCalendarAppointment = async (req, res) => {
       participantsTelNumbers, // Telefon numaralarını ayrı dizide kaydet
       description,
       bookingId: finalBookingId,
-      appointmentDate: new Date(appointmentDate), // Date objesine çevir
+      appointmentDate: new Date(appointmentDate.includes('Z') ? appointmentDate : appointmentDate + 'Z'), // UTC olarak parse et
       isRecurring,
-      endDate: endDate ? new Date(endDate) : null,
+      endDate: endDate ? new Date(endDate.includes('Z') ? endDate : endDate + 'Z') : null,
       appointmentType, // Yeni: Randevu Tipi
       serviceId // Yeni: Randevu Hizmeti
     });
@@ -372,7 +372,7 @@ exports.updateCalendarAppointment = async (req, res) => {
         parentAppointment.participantsTelNumbers = participantsTelNumbers || parentAppointment.participantsTelNumbers;
         parentAppointment.description = description ?? parentAppointment.description;
         parentAppointment.isRecurring = isRecurring ?? parentAppointment.isRecurring;
-        parentAppointment.endDate = endDate ? new Date(endDate) : parentAppointment.endDate;
+        parentAppointment.endDate = endDate ? new Date(endDate.includes('Z') ? endDate : endDate + 'Z') : parentAppointment.endDate;
         parentAppointment.appointmentType = appointmentType ?? parentAppointment.appointmentType; // Yeni: Randevu Tipi
         parentAppointment.serviceId = serviceId ?? parentAppointment.serviceId; // Yeni: Randevu Hizmeti
         
@@ -430,9 +430,9 @@ exports.updateCalendarAppointment = async (req, res) => {
       appointment.participants = participantsWithoutPhone || appointment.participants;
       appointment.participantsTelNumbers = participantsTelNumbers || appointment.participantsTelNumbers;
       appointment.description = description ?? appointment.description;
-      appointment.appointmentDate = appointmentDate ? new Date(appointmentDate) : appointment.appointmentDate;
+      appointment.appointmentDate = appointmentDate ? new Date(appointmentDate.includes('Z') ? appointmentDate : appointmentDate + 'Z') : appointment.appointmentDate;
       appointment.isRecurring = isRecurring ?? appointment.isRecurring;
-      appointment.endDate = endDate ? new Date(endDate) : appointment.endDate;
+      appointment.endDate = endDate ? new Date(endDate.includes('Z') ? endDate : endDate + 'Z') : appointment.endDate;
       appointment.appointmentType = appointmentType ?? appointment.appointmentType; // Yeni: Randevu Tipi
       appointment.serviceId = serviceId ?? appointment.serviceId; // Yeni: Randevu Hizmeti
       
