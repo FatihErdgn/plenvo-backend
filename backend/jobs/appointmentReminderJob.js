@@ -119,7 +119,8 @@ async function processAppointmentReminders() {
     `${appointments.length} adet Appointment hatırlatması bekleniyor`
   );
 
-  for (const appointment of appointments) {
+  for (let i = 0; i < appointments.length; i++) {
+    const appointment = appointments[i];
     try {
       // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et (UTC olarak)
       if (moment(appointment.datetime).utc().isBefore(moment().utc())) {
@@ -157,6 +158,13 @@ async function processAppointmentReminders() {
       }
 
       await sendReminderForAppointment(appointment);
+      
+      // API rate limiting'i önlemek için randevular arasında 2 saniye bekle
+      // Son randevuda bekleme yapmaya gerek yok
+      if (i < appointments.length - 1) {
+        console.log(`Appointment ${appointment._id} işlendi, 2 saniye bekleniyor...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     } catch (err) {
       console.error(`Appointment ${appointment._id} hatırlatma hatası:`, err);
     }
@@ -184,7 +192,8 @@ async function processCalendarAppointmentReminders() {
     `${calendarAppointments.length} adet CalendarAppointment hatırlatması bekleniyor`
   );
 
-  for (const appointment of calendarAppointments) {
+  for (let i = 0; i < calendarAppointments.length; i++) {
+    const appointment = calendarAppointments[i];
     try {
       // Son bir kez daha appointment'ın gelecekte olduğunu kontrol et (UTC olarak)
       if (moment(appointment.appointmentDate).utc().isBefore(moment().utc())) {
@@ -222,6 +231,13 @@ async function processCalendarAppointmentReminders() {
       }
 
       await sendReminderForCalendarAppointment(appointment);
+      
+      // API rate limiting'i önlemek için randevular arasında 2 saniye bekle
+      // Son randevuda bekleme yapmaya gerek yok
+      if (i < calendarAppointments.length - 1) {
+        console.log(`CalendarAppointment ${appointment._id} işlendi, 2 saniye bekleniyor...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     } catch (err) {
       console.error(
         `CalendarAppointment ${appointment._id} hatırlatma hatası:`,
