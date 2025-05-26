@@ -261,12 +261,24 @@ exports.createCalendarAppointment = async (req, res) => {
       participantsTelNumbers, // Telefon numaralarını ayrı dizide kaydet
       description,
       bookingId: finalBookingId,
-      appointmentDate,
+      appointmentDate: new Date(appointmentDate), // Date objesine çevir
       isRecurring,
       endDate: endDate ? new Date(endDate) : null,
       appointmentType, // Yeni: Randevu Tipi
       serviceId // Yeni: Randevu Hizmeti
     });
+
+    // Tarih validasyonu - randevu saatinin geçerli olduğunu kontrol et
+    const appointmentHour = newAppointment.appointmentDate.getUTCHours();
+    const appointmentMinutes = newAppointment.appointmentDate.getUTCMinutes();
+    
+    // Türkiye saatinde 09:00-20:50 arası olmalı (UTC'de 06:00-17:50)
+    if (appointmentHour < 6 || appointmentHour > 17 || (appointmentHour === 17 && appointmentMinutes > 50)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Geçersiz randevu saati. Randevular 09:00-20:50 arası olmalıdır." 
+      });
+    }
 
     await newAppointment.save();
     
@@ -418,11 +430,23 @@ exports.updateCalendarAppointment = async (req, res) => {
       appointment.participants = participantsWithoutPhone || appointment.participants;
       appointment.participantsTelNumbers = participantsTelNumbers || appointment.participantsTelNumbers;
       appointment.description = description ?? appointment.description;
-      appointment.appointmentDate = appointmentDate ?? appointment.appointmentDate;
+      appointment.appointmentDate = appointmentDate ? new Date(appointmentDate) : appointment.appointmentDate;
       appointment.isRecurring = isRecurring ?? appointment.isRecurring;
       appointment.endDate = endDate ? new Date(endDate) : appointment.endDate;
       appointment.appointmentType = appointmentType ?? appointment.appointmentType; // Yeni: Randevu Tipi
       appointment.serviceId = serviceId ?? appointment.serviceId; // Yeni: Randevu Hizmeti
+      
+      // Tarih validasyonu - randevu saatinin geçerli olduğunu kontrol et
+      const appointmentHour = appointment.appointmentDate.getUTCHours();
+      const appointmentMinutes = appointment.appointmentDate.getUTCMinutes();
+      
+      // Türkiye saatinde 09:00-20:50 arası olmalı (UTC'de 06:00-17:50)
+      if (appointmentHour < 6 || appointmentHour > 17 || (appointmentHour === 17 && appointmentMinutes > 50)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Geçersiz randevu saati. Randevular 09:00-20:50 arası olmalıdır." 
+        });
+      }
       
       await appointment.save();
       return res.json({ success: true, data: appointment });

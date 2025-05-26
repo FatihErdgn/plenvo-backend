@@ -11,11 +11,74 @@ const {
   trackMessageSent,
 } = require("../utils/pullSmsService");
 
+// Instance lock için geçici bir koleksiyon/belge kullanacağız
+const mongoose = require("mongoose");
+const LockSchema = new mongoose.Schema({
+  name: { type: String, unique: true },
+  lockedAt: { type: Date, default: Date.now },
+  instanceId: String
+});
+const Lock = mongoose.model("CronLock", LockSchema);
+
+// Her instance için unique bir ID
+const instanceId = `${process.pid}-${Date.now()}`;
+
+/**
+ * Cron job'u çalıştırmadan önce lock almaya çalış
+ */
+async function acquireLock(lockName) {
+  try {
+    // 5 dakikadan eski lock'ları temizle (takılı kalmış olabilir)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    await Lock.deleteMany({ 
+      name: lockName, 
+      lockedAt: { $lt: fiveMinutesAgo } 
+    });
+
+    // Yeni lock oluşturmayı dene
+    const lock = await Lock.create({ 
+      name: lockName, 
+      instanceId: instanceId,
+      lockedAt: new Date()
+    });
+    
+    return true;
+  } catch (error) {
+    // Lock zaten varsa false dön
+    if (error.code === 11000) { // Duplicate key error
+      console.log(`Lock alınamadı: ${lockName} - Başka bir instance çalışıyor`);
+      return false;
+    }
+    console.error("Lock alma hatası:", error);
+    return false;
+  }
+}
+
+/**
+ * İşlem bitince lock'u serbest bırak
+ */
+async function releaseLock(lockName) {
+  try {
+    await Lock.deleteOne({ name: lockName, instanceId: instanceId });
+  } catch (error) {
+    console.error("Lock serbest bırakma hatası:", error);
+  }
+}
+
 /**
  * Randevu tarihinden 24 saat önce (veya aynı gün) hatırlatma mesajı gönderir
  */
 async function sendAppointmentReminders() {
-  console.log("Randevu hatırlatma işi başladı:", new Date().toISOString());
+  const lockName = "appointment-reminder-job";
+  
+  // Lock almayı dene
+  const hasLock = await acquireLock(lockName);
+  if (!hasLock) {
+    console.log("Başka bir instance zaten çalışıyor, bu instance atlanıyor.");
+    return;
+  }
+
+  console.log(`Randevu hatırlatma işi başladı (Instance: ${instanceId}):`, new Date().toISOString());
 
   try {
     // 1. Normal Appointment modeli için hatırlatmalar
@@ -27,6 +90,9 @@ async function sendAppointmentReminders() {
     console.log("Randevu hatırlatma işi tamamlandı:", new Date().toISOString());
   } catch (error) {
     console.error("Hatırlatma işi hatası:", error);
+  } finally {
+    // İşlem bitince lock'u serbest bırak
+    await releaseLock(lockName);
   }
 }
 
@@ -183,6 +249,28 @@ async function sendReminderForAppointment(appointment) {
     return;
   }
 
+  // Önce atomic olarak smsReminderSent'i true yap ve tekrar kontrol et
+  // Bu sayede aynı anda birden fazla process çalışsa bile sadece biri başarılı olur
+  const updateResult = await Appointment.findOneAndUpdate(
+    {
+      _id: appointment._id,
+      smsReminderSent: { $ne: true }, // Sadece henüz gönderilmemişse güncelle
+      isDeleted: { $ne: true }
+    },
+    {
+      $set: { smsReminderSent: true }
+    },
+    {
+      new: false // Eski değeri döndür
+    }
+  );
+
+  // Eğer güncelleme başarısızsa (zaten true ise), mesaj gönderme
+  if (!updateResult) {
+    console.log(`Appointment ${appointment._id} için hatırlatma zaten gönderilmiş`);
+    return;
+  }
+
   // Mesaj içeriğini oluştur
   const dateStr = moment(appointment.datetime).tz("Europe/Istanbul").format("DD.MM.YYYY");
   const timeStr = moment(appointment.datetime).tz("Europe/Istanbul").format("HH:mm");
@@ -207,22 +295,27 @@ ${customerName} Sağlıklı Yaşam Merkezi`;
 
     if (result.success || (result.description && result.description.includes('başarılı'))) {
       try {
-      await Appointment.findByIdAndUpdate(appointment._id, {
-        smsReminderSent: true,
-      });
-      await trackMessageSent(appointment.customerId._id);
+        await trackMessageSent(appointment.customerId._id);
         console.log(`Appointment ${appointment._id} hatırlatması gönderildi ve bayrak güncellendi.`);
       } catch (dbError) {
         console.error(`Appointment ${appointment._id} İÇİN BAYRAK GÜNCELLEME HATASI (MESAJ GÖNDERİLMİŞ OLABİLİR!):`, dbError);
       }
     } else {
+      // Mesaj gönderilemezse flag'i geri al
+      await Appointment.findByIdAndUpdate(appointment._id, {
+        smsReminderSent: false,
+      });
       console.error(
-        `Appointment ${appointment._id} hatırlatma API başarısız:`,
+        `Appointment ${appointment._id} hatırlatma API başarısız, flag geri alındı:`,
         result.error || result
       );
     }
   } catch (sendMessageError) {
-    console.error(`Appointment ${appointment._id} MESAJ GÖNDERME API ÇAĞRISI HATASI:`, sendMessageError);
+    // Hata durumunda flag'i geri al
+    await Appointment.findByIdAndUpdate(appointment._id, {
+      smsReminderSent: false,
+    });
+    console.error(`Appointment ${appointment._id} MESAJ GÖNDERME API ÇAĞRISI HATASI, flag geri alındı:`, sendMessageError);
   }
 }
 
@@ -256,6 +349,27 @@ async function sendReminderForCalendarAppointment(appointment) {
     return;
   }
 
+  // Önce atomic olarak smsReminderSent'i true yap ve tekrar kontrol et
+  // Bu sayede aynı anda birden fazla process çalışsa bile sadece biri başarılı olur
+  const updateResult = await CalendarAppointment.findOneAndUpdate(
+    {
+      _id: appointment._id,
+      smsReminderSent: { $ne: true } // Sadece henüz gönderilmemişse güncelle
+    },
+    {
+      $set: { smsReminderSent: true }
+    },
+    {
+      new: false // Eski değeri döndür
+    }
+  );
+
+  // Eğer güncelleme başarısızsa (zaten true ise), mesaj gönderme
+  if (!updateResult) {
+    console.log(`CalendarAppointment ${appointment._id} için hatırlatma zaten gönderilmiş`);
+    return;
+  }
+
   // Mesaj içeriğini oluştur
   const calDateStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("DD.MM.YYYY");
   const calTimeStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("HH:mm");
@@ -285,11 +399,6 @@ ${customerName} Sağlıklı Yaşam Merkezi`;
 
     // Check for success - either explicit success flag or description indicating success
     if (result.success || (result.description && result.description.includes('başarılı'))) {
-      // Başarılı ise, hatırlatma gönderildi olarak işaretle
-      await CalendarAppointment.findByIdAndUpdate(appointment._id, {
-        smsReminderSent: true,
-      });
-
       // Mesaj sayısını telefonların sayısı kadar artır
       for (let i = 0; i < phoneNumbers.length; i++) {
         await trackMessageSent(appointment.customerId._id);
@@ -299,46 +408,68 @@ ${customerName} Sağlıklı Yaşam Merkezi`;
         `CalendarAppointment ${appointment._id} hatırlatması gönderildi (${phoneNumbers.length} numara)`
       );
     } else {
+      // Mesaj gönderilemezse flag'i geri al
+      await CalendarAppointment.findByIdAndUpdate(appointment._id, {
+        smsReminderSent: false,
+      });
       console.error(
-        `CalendarAppointment ${appointment._id} hatırlatma başarısız:`,
+        `CalendarAppointment ${appointment._id} hatırlatma başarısız, flag geri alındı:`,
         result.error || result
       );
     }
   } catch (error) {
-    console.error(`CalendarAppointment ${appointment._id} mesaj gönderme hatası:`, error);
+    // Hata durumunda flag'i geri al
+    await CalendarAppointment.findByIdAndUpdate(appointment._id, {
+      smsReminderSent: false,
+    });
+    console.error(`CalendarAppointment ${appointment._id} mesaj gönderme hatası, flag geri alındı:`, error);
   }
 }
 
 // Tekrar kontrol ihtiyacını azaltmak için geçmiş randevuları otomatik işaretle
 async function markPastAppointments() {
+  const lockName = "mark-past-appointments-job";
+  
+  // Lock almayı dene
+  const hasLock = await acquireLock(lockName);
+  if (!hasLock) {
+    console.log("Geçmiş randevuları işaretleme: Başka bir instance zaten çalışıyor.");
+    return;
+  }
+
+  console.log(`Geçmiş randevuları işaretleme başladı (Instance: ${instanceId}):`, new Date().toISOString());
+  
   const now = moment().utc();
 
   try {
-  // Geçmiş randevuları hatırlatma gönderildi olarak işaretle
-  await Appointment.updateMany(
-    {
-      datetime: { $lt: now.toDate() },
-      smsReminderSent: { $ne: true },
-      isDeleted: { $ne: true },
-    },
-    {
-      smsReminderSent: true,
-    }
-  );
+    // Geçmiş randevuları hatırlatma gönderildi olarak işaretle
+    await Appointment.updateMany(
+      {
+        datetime: { $lt: now.toDate() },
+        smsReminderSent: { $ne: true },
+        isDeleted: { $ne: true },
+      },
+      {
+        smsReminderSent: true,
+      }
+    );
 
-  await CalendarAppointment.updateMany(
-    {
-      appointmentDate: { $lt: now.toDate() },
-      smsReminderSent: { $ne: true },
-    },
-    {
-      smsReminderSent: true,
-    }
-  );
+    await CalendarAppointment.updateMany(
+      {
+        appointmentDate: { $lt: now.toDate() },
+        smsReminderSent: { $ne: true },
+      },
+      {
+        smsReminderSent: true,
+      }
+    );
 
-  console.log("Geçmiş randevular işaretlendi:", new Date().toISOString());
+    console.log("Geçmiş randevular işaretlendi:", new Date().toISOString());
   } catch (error) {
     console.error("Geçmiş randevuları işaretleme hatası:", error);
+  } finally {
+    // İşlem bitince lock'u serbest bırak
+    await releaseLock(lockName);
   }
 }
 
