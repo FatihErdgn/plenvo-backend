@@ -59,8 +59,8 @@ const sendWhatsAppMessage = async (apiKey, phones, message, webhookId = 5) => {
           'X-Forwarded-Host': NGROK_URL.replace('https://', '')
         }
       });
-      console.log("Development ortamında Ngrok proxy kullanılıyor:", NGROK_URL);
-      console.log("client: ", client);
+      // console.log("Development ortamında Ngrok proxy kullanılıyor:", NGROK_URL);
+      // console.log("client: ", client);
     }
     
     // İsteği client ile yap (development'ta axiosInstance, production'da normal axios)
