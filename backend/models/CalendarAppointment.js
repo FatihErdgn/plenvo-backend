@@ -24,7 +24,19 @@ const calendarAppointmentSchema = new Schema(
       type: Number,
       required: true,
       min: 0,
-      max: 11,
+      max: 47, // 15 dakikalık slotlar için (09:00-20:45 arası 48 slot)
+    },
+    endTimeIndex: {
+      type: Number,
+      required: false,
+      min: 0,
+      max: 47, // Multi-slot randevular için bitiş zamanı
+    },
+    slotCount: {
+      type: Number,
+      default: 1, // Randevunun kaç slot sürdüğü
+      min: 1,
+      max: 48,
     },
     participants: [
       {

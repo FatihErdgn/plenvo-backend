@@ -207,7 +207,9 @@ exports.createCalendarAppointment = async (req, res) => {
     const { 
       doctorId, 
       dayIndex, 
-      timeIndex, 
+      timeIndex,
+      endTimeIndex, // Yeni: Multi-slot için bitiş zamanı
+      slotCount = 1, // Yeni: Slot sayısı
       participants,
       description, 
       bookingId, 
@@ -257,6 +259,8 @@ exports.createCalendarAppointment = async (req, res) => {
       doctorId,
       dayIndex,
       timeIndex,
+      endTimeIndex: endTimeIndex || timeIndex, // Multi-slot desteği
+      slotCount: slotCount || 1, // Multi-slot desteği
       participants: participants.map(p => ({ name: p.name })), // Sadece name alanını al
       participantsTelNumbers, // Telefon numaralarını ayrı dizide kaydet
       description,
@@ -272,11 +276,11 @@ exports.createCalendarAppointment = async (req, res) => {
     const appointmentHour = newAppointment.appointmentDate.getUTCHours();
     const appointmentMinutes = newAppointment.appointmentDate.getUTCMinutes();
     
-    // Türkiye saatinde 09:00-20:50 arası olmalı (UTC'de 06:00-17:50)
-    if (appointmentHour < 6 || appointmentHour > 17 || (appointmentHour === 17 && appointmentMinutes > 50)) {
+    // Türkiye saatinde 09:00-20:45 arası olmalı (UTC'de 06:00-17:45)
+    if (appointmentHour < 6 || appointmentHour > 17 || (appointmentHour === 17 && appointmentMinutes > 45)) {
       return res.status(400).json({ 
         success: false, 
-        message: "Geçersiz randevu saati. Randevular 09:00-20:50 arası olmalıdır." 
+        message: "Geçersiz randevu saati. Randevular 09:00-20:45 arası olmalıdır." 
       });
     }
 
@@ -314,7 +318,9 @@ exports.updateCalendarAppointment = async (req, res) => {
     const { 
       doctorId, 
       dayIndex, 
-      timeIndex, 
+      timeIndex,
+      endTimeIndex, // Yeni: Multi-slot için bitiş zamanı
+      slotCount, // Yeni: Slot sayısı
       participants, 
       description, 
       appointmentDate,
@@ -368,6 +374,8 @@ exports.updateCalendarAppointment = async (req, res) => {
         parentAppointment.doctorId = doctorId || parentAppointment.doctorId;
         parentAppointment.dayIndex = dayIndex ?? parentAppointment.dayIndex;
         parentAppointment.timeIndex = timeIndex ?? parentAppointment.timeIndex;
+        parentAppointment.endTimeIndex = endTimeIndex ?? parentAppointment.endTimeIndex;
+        parentAppointment.slotCount = slotCount ?? parentAppointment.slotCount;
         parentAppointment.participants = participantsWithoutPhone || parentAppointment.participants;
         parentAppointment.participantsTelNumbers = participantsTelNumbers || parentAppointment.participantsTelNumbers;
         parentAppointment.description = description ?? parentAppointment.description;
@@ -395,6 +403,8 @@ exports.updateCalendarAppointment = async (req, res) => {
           doctorId: doctorId || parentAppointment.doctorId,
           dayIndex: dayIndex ?? parentAppointment.dayIndex,
           timeIndex: timeIndex ?? parentAppointment.timeIndex,
+          endTimeIndex: endTimeIndex ?? parentAppointment.endTimeIndex,
+          slotCount: slotCount ?? parentAppointment.slotCount,
           participants: participantsWithoutPhone || parentAppointment.participants,
           participantsTelNumbers: participantsTelNumbers || parentAppointment.participantsTelNumbers,
           description: description ?? parentAppointment.description,
@@ -427,6 +437,8 @@ exports.updateCalendarAppointment = async (req, res) => {
       appointment.doctorId = doctorId || appointment.doctorId;
       appointment.dayIndex = dayIndex ?? appointment.dayIndex;
       appointment.timeIndex = timeIndex ?? appointment.timeIndex;
+      appointment.endTimeIndex = endTimeIndex ?? appointment.endTimeIndex;
+      appointment.slotCount = slotCount ?? appointment.slotCount;
       appointment.participants = participantsWithoutPhone || appointment.participants;
       appointment.participantsTelNumbers = participantsTelNumbers || appointment.participantsTelNumbers;
       appointment.description = description ?? appointment.description;
@@ -440,11 +452,11 @@ exports.updateCalendarAppointment = async (req, res) => {
       const appointmentHour = appointment.appointmentDate.getUTCHours();
       const appointmentMinutes = appointment.appointmentDate.getUTCMinutes();
       
-      // Türkiye saatinde 09:00-20:50 arası olmalı (UTC'de 06:00-17:50)
-      if (appointmentHour < 6 || appointmentHour > 17 || (appointmentHour === 17 && appointmentMinutes > 50)) {
+      // Türkiye saatinde 09:00-20:45 arası olmalı (UTC'de 06:00-17:45)
+      if (appointmentHour < 6 || appointmentHour > 17 || (appointmentHour === 17 && appointmentMinutes > 45)) {
         return res.status(400).json({ 
           success: false, 
-          message: "Geçersiz randevu saati. Randevular 09:00-20:50 arası olmalıdır." 
+          message: "Geçersiz randevu saati. Randevular 09:00-20:45 arası olmalıdır." 
         });
       }
       
