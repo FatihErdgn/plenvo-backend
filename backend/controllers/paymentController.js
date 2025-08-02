@@ -802,3 +802,209 @@ exports.softDeletePayment = async (req, res) => {
     });
   }
 };
+
+/**
+ * getPaymentsByWeek: Belirtilen hafta için tüm randevuların ödeme bilgilerini getirir.
+ * Bu fonksiyon, frontend'in her randevu için ayrı istek atması yerine,
+ * bir haftalık tüm randevular için toplu ödeme bilgisi almasını sağlar.
+ */
+exports.getPaymentsByWeek = async (req, res) => {
+  try {
+    const { weekStart, doctorId } = req.query;
+    const customerId = req.user.customerId;
+    
+    if (!weekStart) {
+      return res.status(400).json({
+        success: false,
+        message: "weekStart parametresi gereklidir."
+      });
+    }
+
+    // Hafta başlangıcı ve bitişi
+    const startDate = new Date(weekStart);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 7);
+    
+    // Tarihleri UTC olarak ayarla
+    startDate.setUTCHours(0, 0, 0, 0);
+    endDate.setUTCHours(23, 59, 59, 999);
+
+    // Bu hafta için tüm randevuları getir (CalendarAppointment)
+    const matchStage = { 
+      customerId: new mongoose.Types.ObjectId(customerId),
+      appointmentDate: { 
+        $gte: startDate, 
+        $lt: endDate 
+      }
+    };
+    
+    if (doctorId) {
+      matchStage.doctorId = new mongoose.Types.ObjectId(doctorId);
+    }
+
+    // Veritabanındaki direkt randevuları getir
+    const dbAppointments = await CalendarAppointment.find(matchStage);
+    
+    // Tekrarlı randevuları da ekle
+    const recurringQuery = {
+      customerId: new mongoose.Types.ObjectId(customerId),
+      isRecurring: true,
+      $or: [
+        { endDate: null },
+        { endDate: { $gte: startDate } }
+      ]
+    };
+    
+    if (doctorId) {
+      recurringQuery.doctorId = new mongoose.Types.ObjectId(doctorId);
+    }
+    
+    const recurringAppointments = await CalendarAppointment.find(recurringQuery);
+    
+    // Bu hafta için oluşturulacak tüm randevu instance'larının listesi
+    let allAppointmentInstances = [];
+    
+    // Direkt randevuları ekle
+    dbAppointments.forEach(appt => {
+      allAppointmentInstances.push({
+        appointmentId: appt._id.toString(),
+        appointmentDate: appt.appointmentDate,
+        bookingId: appt.bookingId,
+        isVirtualInstance: false
+      });
+    });
+    
+    // Tekrarlı randevuların bu hafta için instance'larını oluştur
+    recurringAppointments.forEach(appt => {
+      const weekDay = (startDate.getDay() + 6) % 7;
+      const daysToAdd = (appt.dayIndex - weekDay + 7) % 7;
+      const appointmentDate = new Date(startDate);
+      appointmentDate.setDate(appointmentDate.getDate() + daysToAdd);
+      
+      // Eğer bu instance'ın zaten veritabanında kaydı yoksa ve geçerli tarih aralığındaysa
+      const exists = dbAppointments.some(a => 
+        a.dayIndex === appt.dayIndex && 
+        a.timeIndex === appt.timeIndex &&
+        new Date(a.appointmentDate).toDateString() === appointmentDate.toDateString()
+      );
+      
+      const isException = appt.recurringExceptions?.some(
+        ex => new Date(ex).toDateString() === appointmentDate.toDateString()
+      );
+      
+      const originalAppointmentDate = new Date(appt.appointmentDate);
+      
+      if (!exists && !isException && 
+          (!appt.endDate || appointmentDate <= appt.endDate) && 
+          appointmentDate >= originalAppointmentDate) {
+        allAppointmentInstances.push({
+          appointmentId: appt._id.toString() + "_instance_" + appointmentDate.toISOString().split('T')[0],
+          parentId: appt._id.toString(),
+          appointmentDate: appointmentDate,
+          bookingId: appt.bookingId,
+          isVirtualInstance: true
+        });
+      }
+    });
+
+    // Tüm appointment ID'leri ve bookingId'leri topla
+    const appointmentIds = [];
+    const bookingIds = new Set();
+    
+    allAppointmentInstances.forEach(instance => {
+      if (instance.isVirtualInstance) {
+        appointmentIds.push(new mongoose.Types.ObjectId(instance.parentId));
+      } else {
+        appointmentIds.push(new mongoose.Types.ObjectId(instance.appointmentId));
+      }
+      bookingIds.add(instance.bookingId);
+    });
+
+    // Bu appointment ID'ler ve bookingId'ler için tüm ödemeleri getir
+    const allBookingAppointments = await CalendarAppointment.find({
+      bookingId: { $in: Array.from(bookingIds) }
+    });
+    
+    const allBookingAppointmentIds = allBookingAppointments.map(appt => appt._id);
+    
+    const allPayments = await Payment.find({
+      appointmentId: { $in: allBookingAppointmentIds },
+      isDeleted: false
+    }).populate('currencyId').populate('serviceId');
+
+    // Her randevu instance'ı için ödeme bilgilerini hesapla
+    const paymentsByAppointment = {};
+    
+    allAppointmentInstances.forEach(instance => {
+      const instanceKey = instance.appointmentId;
+      const instanceDate = instance.appointmentDate;
+      
+      // Bu instance için geçerli ödemeleri bul
+      const relatedPayments = allPayments.filter(payment => {
+        // Aynı bookingId'ye sahip ödemeler
+        const paymentAppointment = allBookingAppointments.find(
+          appt => appt._id.toString() === payment.appointmentId.toString()
+        );
+        
+        if (!paymentAppointment || paymentAppointment.bookingId !== instance.bookingId) {
+          return false;
+        }
+        
+        // Ödeme geçerliliği kontrolü
+        let isValid = false;
+        
+        if (payment.paymentPeriod === 'single') {
+          // Tek seferlik ödemeler için özel kontrol
+          if (instance.isVirtualInstance) {
+            // Virtual instance için parent ID ile karşılaştır
+            isValid = payment.appointmentId.toString() === instance.parentId;
+          } else {
+            // Normal randevu için direkt karşılaştır
+            isValid = payment.appointmentId.toString() === instance.appointmentId;
+          }
+        } else {
+          // Periyotlu ödemeler için tarih kontrolü
+          if (!payment.periodEndDate) {
+            isValid = true; // Periyot bitiş tarihi yoksa her zaman geçerli
+          } else {
+            const periodEnd = new Date(payment.periodEndDate);
+            isValid = instanceDate <= periodEnd;
+          }
+        }
+        
+        return isValid;
+      });
+      
+      // Ödemeleri işle ve sırala
+      const processedPayments = relatedPayments.map(payment => {
+        const paymentObj = payment.toObject();
+        const isValid = true; // Yukarıda zaten filtreledik
+        paymentObj.isValid = isValid;
+        paymentObj.isCompleted = isValid && payment.paymentStatus === "Tamamlandı";
+        return paymentObj;
+      });
+      
+      // Sırala: önce tamamlanmış, sonra bekleyen
+      processedPayments.sort((a, b) => {
+        if (a.isCompleted && !b.isCompleted) return -1;
+        if (!a.isCompleted && b.isCompleted) return 1;
+        return 0;
+      });
+      
+      paymentsByAppointment[instanceKey] = processedPayments;
+    });
+
+    return res.status(200).json({ 
+      success: true, 
+      paymentsByAppointment,
+      appointmentInstances: allAppointmentInstances
+    });
+    
+  } catch (err) {
+    console.error("Get Payments By Week Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Haftalık ödeme bilgileri getirilirken bir hata oluştu.",
+    });
+  }
+};

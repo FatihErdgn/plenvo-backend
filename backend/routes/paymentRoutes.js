@@ -14,6 +14,15 @@ router.get(
   paymentController.getPaymentsByAppointment
 );
 
+// Belirli bir hafta için tüm randevuların ödeme bilgilerini getiren endpoint.
+// Route örneği: GET /api/payments/week?weekStart=2024-01-15&doctorId=...
+router.get(
+  "/week",
+  authMiddleware,
+  checkPermission(["admin", "superadmin", "consultant"]),
+  paymentController.getPaymentsByWeek
+);
+
 // Yeni ödeme oluşturma endpoint'i
 router.post(
   "/",
