@@ -136,6 +136,13 @@ exports.getCalendarAppointments = async (req, res) => {
           const appointmentDate = new Date(startDate);
           appointmentDate.setDate(appointmentDate.getDate() + daysToAdd);
           
+          // timeIndex'ten doğru saat ve dakikayı hesapla
+          const hours = Math.floor(appt.timeIndex / 4) + 9; // Her saat 4 slot, 09:00'dan başla
+          const minutes = (appt.timeIndex % 4) * 15; // 0, 15, 30, 45 dakika
+          
+          // Türkiye saatini UTC'ye çevir (TR = UTC+3)
+          appointmentDate.setUTCHours(hours - 3, minutes, 0, 0);
+          
           // Eğer appointmentDate, randevunun endDate'inden önce ve ilk randevu tarihinden sonra ise ve istisnalarda değilse
           const isException = appt.recurringExceptions?.some(
             ex => new Date(ex).toDateString() === appointmentDate.toDateString()
@@ -397,6 +404,15 @@ exports.updateCalendarAppointment = async (req, res) => {
           await parentAppointment.save();
         }
         
+        // Yeni randevu için doğru appointmentDate hesapla (dayIndex/timeIndex'ten)
+        const finalTimeIndex = timeIndex ?? parentAppointment.timeIndex;
+        const hours = Math.floor(finalTimeIndex / 4) + 9; // Her saat 4 slot, 09:00'dan başla
+        const minutes = (finalTimeIndex % 4) * 15; // 0, 15, 30, 45 dakika
+        
+        // Exception tarihi üzerinde doğru saat bilgisini ayarla
+        const appointmentDateWithTime = new Date(exceptionDate);
+        appointmentDateWithTime.setUTCHours(hours - 3, minutes, 0, 0); // TR saatini UTC'ye çevir
+        
         // Bu tarih için yeni bir tek seferlik randevu oluştur
         const newAppointment = new CalendarAppointment({
           customerId,
@@ -409,7 +425,7 @@ exports.updateCalendarAppointment = async (req, res) => {
           participantsTelNumbers: participantsTelNumbers || parentAppointment.participantsTelNumbers,
           description: description ?? parentAppointment.description,
           bookingId: parentAppointment.bookingId,
-          appointmentDate: exceptionDate,
+          appointmentDate: appointmentDateWithTime, // Doğru saat bilgisiyle
           isRecurring: false,
           recurringParentId: parentAppointment._id,
           appointmentType: appointmentType ?? parentAppointment.appointmentType, // Yeni: Randevu Tipi

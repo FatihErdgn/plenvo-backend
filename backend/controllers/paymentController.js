@@ -881,6 +881,13 @@ exports.getPaymentsByWeek = async (req, res) => {
       const appointmentDate = new Date(startDate);
       appointmentDate.setDate(appointmentDate.getDate() + daysToAdd);
       
+      // timeIndex'ten doğru saat ve dakikayı hesapla
+      const hours = Math.floor(appt.timeIndex / 4) + 9; // Her saat 4 slot, 09:00'dan başla
+      const minutes = (appt.timeIndex % 4) * 15; // 0, 15, 30, 45 dakika
+      
+      // Türkiye saatini UTC'ye çevir (TR = UTC+3)
+      appointmentDate.setUTCHours(hours - 3, minutes, 0, 0);
+      
       // Eğer bu instance'ın zaten veritabanında kaydı yoksa ve geçerli tarih aralığındaysa
       const exists = dbAppointments.some(a => 
         a.dayIndex === appt.dayIndex && 

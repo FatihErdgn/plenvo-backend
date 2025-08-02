@@ -386,9 +386,13 @@ async function sendReminderForCalendarAppointment(appointment) {
     return;
   }
 
-  // Mesaj içeriğini oluştur
+  // Mesaj içeriğini oluştur - dayIndex/timeIndex'ten doğru saat hesapla
   const calDateStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("DD.MM.YYYY");
-  const calTimeStr = moment(appointment.appointmentDate).tz("Europe/Istanbul").format("HH:mm");
+  
+  // timeIndex'ten doğru saati hesapla (appointmentDate yerine) 
+  const hours = Math.floor(appointment.timeIndex / 4) + 9; // Her saat 4 slot, 09:00'dan başla
+  const minutes = (appointment.timeIndex % 4) * 15; // 0, 15, 30, 45 dakika
+  const calTimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   const doctorName = appointment.doctorId
     ? `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`
     : "uzmanınız";
